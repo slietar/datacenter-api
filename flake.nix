@@ -23,7 +23,7 @@
       packages.web = pkgs.buildNpmPackage {
         name = "datacenter-web";
         src = ./web;
-        npmDepsHash = "sha256-cfqbtLxiu/bUp2RO7aIMWH3DYAswF8xCFzenHYnyOpM=";
+        npmDepsHash = "sha256-lvDPkk/8iR25t8nOooweuVk9LuyETGc7jO6w1tBjCKg=";
 
         installPhase = ''
           runHook preInstall
