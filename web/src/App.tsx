@@ -13,7 +13,7 @@ import './App.css';
 import '@opsa-design/shared/styles/css/index.css';
 import '@opsa-design/management/styles/index.css';
 import '@opsa-design/shared/scripts/components/logo.js';
-import { NavBar } from '@opsa-design/management';
+import { Application, NavBar } from '@opsa-design/management';
 import { OpsaLogo } from '@opsa-design/shared/scripts/components/logo.js';
 
 const fetcher = (url: string) => fetch(url).then(res => res.json());
@@ -81,88 +81,86 @@ interface Data {
 }
 
 export default function App() {
-  // const { data } = useSWR(`${import.meta.env.VITE_API_URL || ""}/hosts`, fetcher, { refreshInterval: 5000 })
-  const data: Data = {
-      "hosts": {
-          "gnb-003": {
-              "power_is_on": true,
-              "power_restore_policy": "always-off",
-              "sensors": {
-                  "FCB FAN3": "0.00 rpm",
-                  "PSU 1 POUT": "0.00 A",
-                  "FCB Ambient2": "0.00 °C",
-                  "FCB Ambient1": "18.00 °C",
-                  "FCB FAN4": "0.00 rpm",
-                  "PSU 2 POUT": "170.00 A",
-                  "FCB FAN2": "0.00 rpm",
-                  "PS Current": "0.00 A",
-                  "FCB FAN1": "0.00 rpm"
-              }
-          },
-          "gnb-001": {
-            "error": true
-          },
-          "gnb-002": {
-              "power_is_on": false,
-              "power_restore_policy": "always-off",
-              "sensors": {
-                  "FCB Ambient1": "18.00 °C",
-                  "FCB Ambient2": "0.00 °C",
-                  "FCB FAN3": "0.00 rpm",
-                  "FCB FAN1": "0.00 rpm",
-                  "FCB FAN2": "0.00 rpm",
-                  "FCB FAN4": "0.00 rpm",
-                  "PSU 2 POUT": "170.00 A",
-                  "PS Current": "0.00 A",
-                  "PSU 1 POUT": "0.00 A"
-              }
-          },
-          "gnb-004": {
-              "power_is_on": false,
-              "power_restore_policy": "always-off",
-              "sensors": {
-                  "FCB Ambient2": "0.00 °C",
-                  "FCB FAN3": "0.00 rpm",
-                  "FCB Ambient1": "18.00 °C",
-                  "PSU 1 POUT": "0.00 A",
-                  "FCB FAN1": "0.00 rpm",
-                  "PS Current": "0.00 A",
-                  "FCB FAN2": "0.00 rpm",
-                  "FCB FAN4": "0.00 rpm",
-                  "PSU 2 POUT": "170.00 A"
-              }
-          }
-      }
-  };
+  let applicationRef = React.useRef<Application>(null);
+
+  const { data } = useSWR(`${import.meta.env.VITE_API_URL || ""}/hosts`, fetcher, { refreshInterval: 5000 })
+  // const data: Data = {
+  //     "hosts": {
+  //         "gnb-003": {
+  //             "power_is_on": true,
+  //             "power_restore_policy": "always-off",
+  //             "sensors": {
+  //                 "FCB FAN3": "0.00 rpm",
+  //                 "PSU 1 POUT": "0.00 A",
+  //                 "FCB Ambient2": "0.00 °C",
+  //                 "FCB Ambient1": "18.00 °C",
+  //                 "FCB FAN4": "0.00 rpm",
+  //                 "PSU 2 POUT": "170.00 A",
+  //                 "FCB FAN2": "0.00 rpm",
+  //                 "PS Current": "0.00 A",
+  //                 "FCB FAN1": "0.00 rpm"
+  //             }
+  //         },
+  //         "gnb-001": {
+  //           "error": true
+  //         },
+  //         "gnb-002": {
+  //             "power_is_on": false,
+  //             "power_restore_policy": "always-off",
+  //             "sensors": {
+  //                 "FCB Ambient1": "18.00 °C",
+  //                 "FCB Ambient2": "0.00 °C",
+  //                 "FCB FAN3": "0.00 rpm",
+  //                 "FCB FAN1": "0.00 rpm",
+  //                 "FCB FAN2": "0.00 rpm",
+  //                 "FCB FAN4": "0.00 rpm",
+  //                 "PSU 2 POUT": "170.00 A",
+  //                 "PS Current": "0.00 A",
+  //                 "PSU 1 POUT": "0.00 A"
+  //             }
+  //         },
+  //         "gnb-004": {
+  //             "power_is_on": false,
+  //             "power_restore_policy": "always-off",
+  //             "sensors": {
+  //                 "FCB Ambient2": "0.00 °C",
+  //                 "FCB FAN3": "0.00 rpm",
+  //                 "FCB Ambient1": "18.00 °C",
+  //                 "PSU 1 POUT": "0.00 A",
+  //                 "FCB FAN1": "0.00 rpm",
+  //                 "PS Current": "0.00 A",
+  //                 "FCB FAN2": "0.00 rpm",
+  //                 "FCB FAN4": "0.00 rpm",
+  //                 "PSU 2 POUT": "170.00 A"
+  //             }
+  //         }
+  //     }
+  // };
 
   return (
-    <div className="Application">
-      <div className="Header">
-        <div className="contents">
-          <div className="title">
-            <div className="brand">
-              <OpsaLogo title="Datacenter" />
-            </div>
-            <a href="#" className="account">
-              <img src="https://avatars.githubusercontent.com/u/11591121?v=4" />
-              {/* <PersonIcon /> */}
-              <div className="text">Simon</div>
-            </a>
-          </div>
-          <NavBar
-            leftEntries={[
-              {
-                id: 'servers',
-                active: true,
-                label: 'Servers',
-                icon: StorageIcon,
-                target: '/',
-              },
-            ]} />
-        </div>
-      </div>
-      <div className="body">
-        <div className="Body contents">
+    <Application
+      ref={applicationRef}
+      brand={<OpsaLogo title="Datacenter" />}
+      account={
+        <a href="#" className="account">
+          <img src="https://avatars.githubusercontent.com/u/11591121?v=4" />
+          {/* <PersonIcon /> */}
+          <div className="text">Simon</div>
+        </a>
+      }
+      navigation={
+        <NavBar
+          leftEntries={[
+            {
+              id: 'servers',
+              active: true,
+              label: 'Servers',
+              icon: StorageIcon,
+              target: '/',
+            },
+          ]} />
+      }>
+        <div className="Body">
           <h1>Servers</h1>
 
           {data &&
@@ -187,6 +185,11 @@ export default function App() {
                               data-variant={hostInfo.power_is_on ? "danger" : "default"}
                               onClick={() => {
                                 if (!hostInfo.error) {
+                                  applicationRef.current!.pushToast({
+                                    title: "Power state change on " + hostName,
+                                    description: `Turning ${hostName} ${hostInfo.power_is_on ? "off" : "on"}. This may take a few seconds.`,
+                                  });
+
                                   setPowerState(hostName, !hostInfo.power_is_on);
                                 }
                               }}>
@@ -232,7 +235,6 @@ export default function App() {
                   </Fragment>
                 ))}
         </div>
-      </div>
-    </div>
+    </Application>
   );
 }
