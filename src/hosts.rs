@@ -3,6 +3,7 @@ use crate::ipmi::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do}
 
 use axum::Json;
 use axum::extract::{Path, State};
+use axum::http::{HeaderMap, StatusCode};
 use futures::FutureExt;
 use futures::TryFutureExt;
 use futures::stream::{self, StreamExt};
@@ -163,5 +164,28 @@ pub async fn ipmi_host_put_handler(
         )
         .await
         .unwrap();
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Whoami {
+    name: String,
+    email: String,
+}
+
+pub async fn whoami_handler(headers: HeaderMap) -> Result<Json<Whoami>, StatusCode> {
+    let header_str = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
+
+    let name = header_str("Remote-Name");
+    let email = header_str("Remote-Email");
+
+    match (name, email) {
+        (Some(name), Some(email)) => Ok(Json(Whoami { name, email })),
+        _ => Err(StatusCode::SERVICE_UNAVAILABLE),
     }
 }

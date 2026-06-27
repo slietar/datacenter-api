@@ -12,8 +12,21 @@ import './App.css';
 const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 
+const API_URL = import.meta.env.VITE_API_URL || "";
+
+async function gravatarUrl(email: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(email.toLowerCase())
+  );
+  const hash = Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `https://www.gravatar.com/avatar/${hash}?d=mp`;
+}
+
 async function setPowerState(hostname: string, state: boolean) {
-  await fetch(`${import.meta.env.VITE_API_URL || ""}/host/${hostname}/command`, {
+  await fetch(`${API_URL}/host/${hostname}/command`, {
     method: "PUT",
     body: JSON.stringify({ power: state }),
     headers: {
@@ -36,17 +49,24 @@ interface Data {
 export default function App() {
   let applicationRef = React.useRef<Application>(null);
 
-  const { data }: { data: Data; } = useSWR(`${import.meta.env.VITE_API_URL || ""}/hosts`, fetcher, { refreshInterval: 5000 })
+  const { data }: { data: Data; } = useSWR(`${API_URL}/hosts`, fetcher, { refreshInterval: 5000 });
+  const { data: whoami }: { data?: { name: string; email: string; }; } = useSWR(`${API_URL}/whoami`, fetcher);
+  const { data: avatarUrl } = useSWR(
+    whoami ? ['gravatar', whoami.email] : null,
+    ([, email]) => gravatarUrl(email)
+  );
 
   return (
     <Application
       ref={applicationRef}
       brand={<OpsaLogo title="Datacenter" />}
       account={
-        <a href="#" className="account">
-          <img src="https://avatars.githubusercontent.com/u/11591121?v=4" />
-          <div className="text">Simon</div>
-        </a>
+        whoami && (
+          <a href="https://home.lietar.net" className="account">
+            <img src={avatarUrl} />
+            <div className="text">{whoami.name}</div>
+          </a>
+        )
       }
       navigation={
         <NavBar
