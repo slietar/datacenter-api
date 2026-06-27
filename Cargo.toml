@@ -18,7 +18,7 @@ either = { version = "1.15.0", features = ["serde"] }
 futures = "0.3.31"
 hmac = "0.12.1"
 http = "1.4.0"
-ipmi-rs = "0.5.0"
+ipmi-rs = { path = "../ipmi-rs/ipmi-rs" }
 rand = "0.9.2"
 regex = "1.12.2"
 reqwest = { version = "0.13.1", features = ["json", "stream"] }
