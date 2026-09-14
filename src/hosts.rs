@@ -1,3 +1,4 @@
+use crate::comin::{CominStateUpdate, protobuf};
 use crate::config::Config;
 use crate::ipmi::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
 
@@ -110,6 +111,15 @@ pub async fn host_get_handler(
         .get(&hostname)
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    let comin_state = host_manager
+        .get_comin_state()
+        .await
+        .transpose()
+        .map_err(|e| {
+            tracing::error!("Error getting COMIN state for host {}: {:?}", hostname, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     let ipmi_state = host_manager
         .get_ipmi_state()
         .await
@@ -119,7 +129,11 @@ pub async fn host_get_handler(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    Ok(Json(HostState { ipmi: ipmi_state }))
+    eprintln!("{:#?}", comin_state);
+
+    Ok(Json(HostState {
+        ipmi: ipmi_state,
+    }))
 }
 
 pub async fn ipmi_hosts_handler(State(config): State<Config>) -> Json<HostList> {

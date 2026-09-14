@@ -29,6 +29,7 @@ pub struct Host {
     pub mac: Option<String>,
 
     pub ipmi: bool,
+    pub comin: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]

@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 mod binary_cache;
+mod comin;
 mod config;
 mod hosts;
 mod ipmi;

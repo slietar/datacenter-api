@@ -1,3 +1,4 @@
+use crate::comin::{CominManager, CominStateUpdate};
 use crate::hosts::{IpmiState, read_host_state};
 
 use ipmi_rs::Ipmi;
@@ -11,6 +12,7 @@ pub struct HostManager {
     config: crate::config::Config,
     host_config: crate::config::Host,
     ipmi_manager: Option<Arc<IpmiManager>>,
+    comin_manager: Option<Arc<CominManager>>,
 }
 
 impl HostManager {
@@ -26,7 +28,19 @@ impl HostManager {
                     Duration::from_secs(30),
                 ))
             }),
+            comin_manager: host_config.comin.then(|| {
+                Arc::new(CominManager::new(
+                    host_config.address.clone(),
+                ))
+            }),
         }
+    }
+
+    pub async fn get_comin_state(&self) -> Option<CominStateUpdate> {
+        let comin_manager = self.comin_manager.as_ref()?;
+        let receiver = comin_manager.subscribe().await;
+
+        Some((*receiver.borrow()).clone())
     }
 
     pub async fn get_ipmi_state(&self) -> Option<IpmiReading> {
