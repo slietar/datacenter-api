@@ -1,22 +1,28 @@
+#![allow(unused)]
+
 mod binary_cache;
 mod config;
 mod hosts;
 mod ipmi;
+mod manager;
 mod nar;
 mod pxe;
 mod store;
+mod state;
 
 use axum::Router;
 use axum::routing::{get, put};
 use axum_extra::middleware::option_layer;
 use clap::Parser;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
-use crate::hosts::{ipmi_host_get_handler, ipmi_host_put_handler, ipmi_hosts_handler, whoami_handler};
+use crate::hosts::{host_get_handler, ipmi_host_put_handler, ipmi_hosts_handler, whoami_handler};
 
 #[derive(rust_embed::RustEmbed, Clone)]
 #[folder = "web/dist"]
@@ -59,13 +65,26 @@ async fn main() -> anyhow::Result<()> {
         (Some(_), Some(_)) => anyhow::bail!("Cannot set both `password` and `password_file`"),
     }
 
+    let host_managers = config
+        .host
+        .iter()
+        .map(|(host_name, host_config)| {
+            let manager = manager::HostManager::new(&config, host_config);
+            (host_name.clone(), manager)
+        })
+        .collect::<HashMap<_, _>>();
+
+    let state = state::State {
+        host_managers: Arc::new(host_managers),
+    };
+
     let serve_assets = axum_embed::ServeEmbed::<Assets>::new();
     let app = Router::new()
-        .route("/whoami", get(whoami_handler))
-        .route("/hosts", get(ipmi_hosts_handler))
-        .route("/host/{hostname}", get(ipmi_host_get_handler))
-        .route("/host/{hostname}/command", put(ipmi_host_put_handler))
-        .nest("/pxe", pxe::router(config.clone()))
+        // .route("/whoami", get(whoami_handler))
+        // .route("/hosts", get(ipmi_hosts_handler))
+        .route("/host/{hostname}", get(host_get_handler))
+        // .route("/host/{hostname}/command", put(ipmi_host_put_handler))
+        // .nest("/pxe", pxe::router(config.clone()))
         .fallback_service(serve_assets)
         .layer(
             TraceLayer::new_for_http()
@@ -76,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
             args.cors_allow_all
                 .then(|| CorsLayer::new().allow_origin(cors::Any)),
         ))
-        .with_state(config);
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", args.port)).await?;
     tracing::info!("listening on {}", listener.local_addr().unwrap());

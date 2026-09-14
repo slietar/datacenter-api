@@ -14,6 +14,11 @@ use ipmi_rs::sensor_event::GetSensorReading;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostState {
+    ipmi: Option<IpmiState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpmiState {
     power_is_on: bool,
     power_restore_policy: String,
     sensors: HashMap<String, String>,
@@ -60,7 +65,7 @@ use ipmi_rs::sensor_event::ThresholdReading;
 use ipmi_rs::storage::sdr::Record;
 use ipmi_rs::storage::sdr::event_reading_type_code::EventReadingTypeCodes;
 
-fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<HostState> {
+pub(crate) fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<IpmiState> {
     let chassis = ipmi
         .send_recv(GetChassisStatus)
         .map_err(|e| anyhow::anyhow!("{:?}", e))?;
@@ -85,7 +90,7 @@ fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<HostState> {
 
     let sensor_values = sensors.iter().filter_map(extract_sensor).collect();
 
-    Ok(HostState {
+    Ok(IpmiState {
         power_is_on: chassis.power_is_on,
         power_restore_policy: match chassis.power_restore_policy {
             PowerRestorePolicy::AlwaysOn => "always-on".to_owned(),
@@ -96,28 +101,25 @@ fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<HostState> {
     })
 }
 
-pub async fn ipmi_host_get_handler(
+pub async fn host_get_handler(
     Path(hostname): Path<String>,
-    State(config): State<Config>,
-) -> Json<Either<HostState, Error>> {
-    let Some(host) = config.host.get(&hostname) else {
-        return Json(Either::right(Error {
-            error: "invalid host".to_string(),
-        }));
-    };
+    State(state): State<crate::state::State>,
+) -> Result<Json<HostState>, StatusCode> {
+    let host_manager = state
+        .host_managers
+        .get(&hostname)
+        .ok_or(StatusCode::NOT_FOUND)?;
 
-    let result = ipmi_do(
-        &host.address,
-        &config.ipmi.username,
-        config.ipmi.password.as_ref().unwrap().as_bytes(),
-        read_host_state,
-    )
-    .map_err(|e| Error {
-        error: format!("{:?}", e),
-    })
-    .map_ok_or_else(Either::right, Either::left)
-    .await;
-    Json(result)
+    let ipmi_state = host_manager
+        .get_ipmi_state()
+        .await
+        .transpose()
+        .map_err(|e| {
+            tracing::error!("Error getting IPMI state for host {}: {:?}", hostname, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    Ok(Json(HostState { ipmi: ipmi_state }))
 }
 
 pub async fn ipmi_hosts_handler(State(config): State<Config>) -> Json<HostList> {
@@ -129,6 +131,7 @@ pub async fn ipmi_hosts_handler(State(config): State<Config>) -> Json<HostList> 
                 config.ipmi.password.as_ref().unwrap().as_bytes(),
                 read_host_state,
             )
+            .map_ok(|ipmi| HostState { ipmi: Some(ipmi) })
             .map_err(|e| Error {
                 error: format!("{:?}", e),
             })
