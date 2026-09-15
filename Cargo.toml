@@ -11,6 +11,7 @@ axum-embed = "0.1.0"
 axum-extra = { version = "0.12.5", features = ["erased-json", "middleware"] }
 base64 = "0.22.1"
 camino = "1.2.2"
+chrono = "0.4.45"
 clap = { version = "4.5.54", features = ["derive", "env"] }
 connection-pool = "0.3.7"
 derive_more = { version = "2.1.1", features = ["debug"] }

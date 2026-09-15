@@ -4,12 +4,13 @@ mod binary_cache;
 mod comin;
 mod config;
 mod handlers;
+mod headscale;
 mod ipmi;
 mod manager;
 mod nar;
 mod pxe;
-mod store;
 mod state;
+mod store;
 
 mod protobuf {
     tonic::include_proto!("protobuf");
@@ -79,6 +80,12 @@ async fn main() -> anyhow::Result<()> {
         .collect::<HashMap<_, _>>();
 
     let state = state::State {
+        headscale_manager: config.headscale.as_ref().map(|headscale| {
+            headscale::manager::HeadscaleManager::new(
+                headscale.url.clone(),
+                headscale.api_key.clone(),
+            )
+        }),
         host_managers: Arc::new(host_managers),
     };
 

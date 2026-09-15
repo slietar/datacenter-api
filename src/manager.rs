@@ -11,10 +11,10 @@ use tokio::sync::{Notify, broadcast};
 
 #[derive(Debug)]
 pub struct HostManager {
-    config: crate::config::Config,
-    host_config: crate::config::Host,
-    ipmi_manager: Option<Arc<IpmiManager>>,
-    comin_manager: Option<Arc<CominManager>>,
+    pub config: crate::config::Config,
+    pub host_config: crate::config::Host,
+    pub ipmi_manager: Option<Arc<IpmiManager>>,
+    pub comin_manager: Option<Arc<CominManager>>,
 }
 
 impl HostManager {

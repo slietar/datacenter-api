@@ -34,7 +34,15 @@ pub struct Host {
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct Headscale {
+    pub api_key: String,
+    pub url: Url,
+}
+
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
+    pub headscale: Option<Headscale>,
     pub host: HashMap<String, Host>,
     pub ipmi: Ipmi,
     pub pxe: Pxe,

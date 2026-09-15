@@ -19,7 +19,7 @@ pub struct ClientError {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
+// #[serde(untagged)]
 pub enum ClientResult<T> {
     Ok(T),
     Err(ClientError),
@@ -40,6 +40,7 @@ impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
 #[derive(Debug, Clone, Serialize)]
 pub struct HostClientState {
     comin: Option<ClientResult<crate::comin::client::ClientState>>,
+    headscale: Option<ClientResult<Option<crate::headscale::client::NodeState>>>,
     ipmi: Option<IpmiState>,
 }
 
@@ -128,16 +129,35 @@ pub(crate) fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<IpmiState
 }
 
 pub async fn host_get_handler(
-    Path(hostname): Path<String>,
+    Path(name): Path<String>,
     State(state): State<crate::state::State>,
 ) -> Result<Json<HostClientState>, StatusCode> {
     let host_manager = state
         .host_managers
-        .get(&hostname)
+        .get(&name)
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let comin_state = host_manager
-        .get_comin_state()
+    let comin_state = host_manager.get_comin_state().await.map(ClientResult::from);
+
+    let headscale_state =
+        futures::future::OptionFuture::from(state.headscale_manager.as_ref().map(
+            async |manager|  {
+                let state = manager.get_state().await?;
+
+                Ok(state
+                    .nodes
+                    .iter()
+                    .find(|node_state| {
+                        node_state
+                            .ip_addresses
+                            .contains(&host_manager.host_config.address)
+                    })
+                    .map(|node_state| crate::headscale::client::NodeState {
+                        node: node_state.into(),
+                        user: (&node_state.user).into(),
+                    }))
+            },
+        ))
         .await
         .map(ClientResult::from);
 
@@ -146,13 +166,14 @@ pub async fn host_get_handler(
         .await
         .transpose()
         .map_err(|e| {
-            tracing::error!("Error getting IPMI state for host {}: {:?}", hostname, e);
+            tracing::error!("Error getting IPMI state for host {}: {:?}", name, e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     Ok(Json(HostClientState {
         comin: comin_state,
         ipmi: ipmi_state,
+        headscale: headscale_state,
     }))
 }
 
