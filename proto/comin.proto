@@ -1,0 +1,305 @@
+// Adapted from https://github.com/nlewo/comin/blob/main/pkg/protobuf/services.proto
+// for use with prost/tonic, which do not yet support the editions syntax:
+// `edition = "2023"` was replaced with `syntax = "proto3"`, dropping the
+// now-redundant explicit `IMPLICIT` field presence option (proto3's default).
+
+syntax = "proto3";
+
+package protobuf;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/nlewo/comin/pkg/protobuf";
+
+service Comin {
+  rpc GetState(google.protobuf.Empty) returns (State) {}
+  rpc Fetch(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Suspend(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Resume(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Confirm(ConfirmRequest) returns (google.protobuf.Empty) {}
+  rpc Events(google.protobuf.Empty) returns (stream Event);
+  rpc DeploymentLatestSubmit(Operation) returns (google.protobuf.Empty) {}
+}
+
+message Operation {
+  string operation_submitted = 1;
+}
+
+message Event {
+  message EvalStarted {
+    Generation generation = 1;
+  }
+  message EvalFinished {
+    Generation generation = 1;
+  }
+  message BuildStarted {
+    Generation generation = 1;
+  }
+  message BuildFinished {
+    Generation generation = 1;
+  }
+  message ConfirmationSubmitted {
+    string mode = 1;
+    string uuid = 2;
+  }
+  message ConfirmationCancelled {
+    string uuid = 1;
+  }
+  message ConfirmationConfirmed {
+    string origin = 1; 
+    string uuid = 2;
+  }
+  message Resume {
+  }
+  message Suspend {
+  }
+  message DeploymentStarted {
+    Deployment deployment = 1;
+  }
+  message DeploymentFinished {
+    Deployment deployment = 1;
+  }
+  message RebootRequired {
+    Deployment deployment = 1;
+  }
+  message ManagerState {
+    State state = 1;
+  }
+  message Fetched {
+    bool updated = 1;
+    bool verified = 2;
+    oneof Type {
+      GitRepositoryStatus gitRepositoryStatus = 3;
+    }
+  }
+  message Log {
+    string object_type = 4;
+    string object_uuid = 5;
+    message Open {
+    }
+    message Close {
+    }
+    message Line {
+      // stdout or stdin
+      string source = 1;
+      string msg = 4;
+    }
+    oneof Type {
+      Open open = 1;
+      Close close = 2;
+      Line line = 3;
+    }
+  }
+  oneof Type {
+    EvalStarted evalStartedType = 1;
+    EvalFinished evalFinishedType = 2;
+    BuildStarted buildStartedType = 3;
+    BuildFinished buildFinishedType = 4;
+    ConfirmationSubmitted confirmationSubmittedType = 5;
+    ConfirmationCancelled confirmationCancelledType = 6;
+    ConfirmationConfirmed confirmationConfirmedType = 7;
+    Resume resume = 8;
+    Suspend suspend = 9;
+    DeploymentStarted deploymentStartedType = 10;
+    DeploymentFinished deploymentFinishedType = 11;
+    RebootRequired rebootRequired = 12;
+    ManagerState managerState = 13;
+    Fetched fetched = 14;
+    Log log = 16;
+  }
+  google.protobuf.Timestamp createdAt = 15;
+}
+
+message ConfirmRequest {
+  string generationUuid = 1;
+  string for = 2;  // possible values: "build", "deploy", "all"
+}
+
+message Git {
+  string repository_subdir = 1;
+  string system_attr = 2;
+  string hostname = 3;
+
+  string selected_remote_url = 4;
+  string selected_remote_name = 5;
+  string selected_branch_name = 6;
+  string selected_commit_id = 7;
+  string selected_commit_msg = 8;
+  google.protobuf.BoolValue selected_branch_is_testing = 9;
+
+  string main_commit_id = 10;
+  string main_remote_name = 11;
+  string main_branch_name = 12;
+}
+
+message Source {
+  oneof source {
+    Git git = 1;
+  }
+}
+
+message Generation {
+  string uuid = 1;
+
+  Source source = 2;
+
+  // This field is no longer part of a generation
+  string repository_path = 24 [deprecated = true];;
+
+  // Deprecated: These fields are kept for backward compatibility with existing store files.
+  // They will be migrated to the Source.git field on load.
+  string repository_subdir = 25 [deprecated = true];
+  string system_attr = 26 [deprecated = true];
+  string hostname = 3 [deprecated = true];
+
+  string selected_remote_url = 4 [deprecated = true];
+  string selected_remote_name = 5 [deprecated = true];
+  string selected_branch_name = 6 [deprecated = true];
+  string selected_commit_id = 7 [deprecated = true];
+  string selected_commit_msg = 8 [deprecated = true];
+  google.protobuf.BoolValue selected_branch_is_testing = 9 [deprecated = true];
+
+  string main_commit_id = 10 [deprecated = true];
+  string main_remote_name = 11 [deprecated = true];
+  string main_branch_name = 12 [deprecated = true];
+
+  string eval_status = 13;
+  google.protobuf.Timestamp eval_started_at = 14;
+  google.protobuf.Timestamp eval_ended_at = 15;
+  string eval_err = 16;
+
+  string out_path = 17;
+  string drv_path = 18;
+  string machine_id = 19;
+
+  string build_status = 20;
+  string build_reason = 27;
+  google.protobuf.Timestamp build_started_at = 21;
+  google.protobuf.Timestamp build_ended_at = 22;
+  string build_err = 23;
+}
+
+message Deployment {
+  string uuid = 1;
+  string reason = 10;
+  Generation generation = 2;
+
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp ended_at = 4;
+
+  string error_msg = 5;
+  google.protobuf.BoolValue restart_comin = 6;
+  string profile_path = 7;
+  string status = 8;
+  string operation_submitted = 12;
+  string operation = 9;
+  string operation_reason = 15;
+  google.protobuf.Timestamp created_at = 11;
+  map<string, string> current_inhibitors = 13;
+  map<string, string> new_inhibitors = 14;
+}
+
+message State {
+  google.protobuf.BoolValue need_to_reboot = 1;
+  google.protobuf.BoolValue is_suspended = 2;
+  Builder builder = 3;
+  Deployer deployer = 4;
+  Fetcher fetcher = 5;
+  Store store = 6;
+  Confirmer build_confirmer = 7;
+  Confirmer deploy_confirmer = 8;
+}
+
+message Deployer {
+  google.protobuf.BoolValue is_deploying = 1;
+  Deployment deployment = 2;
+  Generation generation_to_deploy = 3;
+  string operation = 6;
+  Deployment previous_deployment = 4;
+  google.protobuf.BoolValue is_suspended = 5;
+}
+
+message Builder {
+  google.protobuf.BoolValue is_evaluating = 1;
+  google.protobuf.BoolValue is_building = 2;
+  Generation generation = 3;
+  string generation_uuid = 4;
+  google.protobuf.BoolValue is_suspended = 5;
+  string hostname = 6;
+  string repository_path = 7;
+}
+
+message Confirmer {
+  int64 mode = 1;
+  string submitted = 2;
+  string confirmed = 3;
+  int64 autoconfirm_duration = 4;
+  google.protobuf.Timestamp autoconfirm_started_at = 5;
+  google.protobuf.BoolValue autoconfirm_started = 6;
+}
+
+message Fetcher {
+  google.protobuf.BoolValue is_fetching = 1;
+  oneof status {
+    GitRepositoryStatus git_repository_status = 2;
+  }
+}
+
+message Branch {
+  string name = 1;
+  string commit_id = 2;
+  string commit_msg = 3;
+  string error_msg = 4;
+  string on_top_of = 5;
+}
+
+message Remote {
+  string name = 1;
+  string url = 2;
+  string fetch_error_msg = 3;
+  Branch main = 4;
+  Branch testing = 5;
+  google.protobuf.Timestamp fetched_at = 6;
+  google.protobuf.BoolValue fetched = 7;
+}
+
+message GitRepositoryStatus {
+  // This is the deployed Main commit ID. It is used to ensure fast forward
+  string selected_commit_id = 1;
+  string selected_commit_msg = 2;
+  string selected_remote_name = 3;
+  string selected_branch_name = 4;
+  google.protobuf.BoolValue selected_branch_is_testing = 5;
+  google.protobuf.BoolValue selected_commit_signed = 6;
+  string selected_commit_signed_by = 7;
+  // True if public keys were available when the commit has been checked out
+  google.protobuf.BoolValue selected_commit_should_be_signed = 8;
+  string main_commit_id = 9;
+  string main_remote_name = 10;
+  string main_branch_name = 11;
+  repeated Remote remotes = 12;
+  string error_msg = 13;
+}
+
+message DeployerState {
+  bool is_suspended = 1;
+  string suspend_reason = 2;
+}
+
+message Store {
+  repeated Deployment deployments = 1;
+  repeated Generation generations = 2;
+ 
+  string deployment_switched = 3;
+  string deployment_booted = 4;
+  repeated string deployments_boot_entry = 5;
+  repeated string deployments_successful = 6;
+  repeated string deployments_any = 7;
+
+  DeployerState deployer = 8;
+  int32 deployment_boot_entry_capacity = 9;
+  int32 deployment_successful_capacity = 10;
+  int32 deployment_any_capacity = 11;
+}

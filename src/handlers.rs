@@ -1,6 +1,6 @@
-use crate::comin::{CominStateUpdate, protobuf};
+use crate::comin::manager::{CominStateUpdate};
 use crate::config::Config;
-use crate::ipmi::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
+use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -136,73 +136,73 @@ pub async fn host_get_handler(
     }))
 }
 
-pub async fn ipmi_hosts_handler(State(config): State<Config>) -> Json<HostList> {
-    let hosts = stream::iter(config.host)
-        .map(|(hostname, host)| {
-            ipmi_do(
-                &host.address,
-                &config.ipmi.username,
-                config.ipmi.password.as_ref().unwrap().as_bytes(),
-                read_host_state,
-            )
-            .map_ok(|ipmi| HostState { ipmi: Some(ipmi) })
-            .map_err(|e| Error {
-                error: format!("{:?}", e),
-            })
-            .map_ok_or_else(Either::right, Either::left)
-            .map(move |v| (hostname, v))
-        })
-        .buffer_unordered(4)
-        .collect()
-        .await;
+// pub async fn ipmi_hosts_handler(State(config): State<Config>) -> Json<HostList> {
+//     let hosts = stream::iter(config.host)
+//         .map(|(hostname, host)| {
+//             ipmi_do(
+//                 &host.address,
+//                 &config.ipmi.username,
+//                 config.ipmi.password.as_ref().unwrap().as_bytes(),
+//                 read_host_state,
+//             )
+//             .map_ok(|ipmi| HostState { ipmi: Some(ipmi) })
+//             .map_err(|e| Error {
+//                 error: format!("{:?}", e),
+//             })
+//             .map_ok_or_else(Either::right, Either::left)
+//             .map(move |v| (hostname, v))
+//         })
+//         .buffer_unordered(4)
+//         .collect()
+//         .await;
 
-    Json(HostList { hosts })
-}
+//     Json(HostList { hosts })
+// }
 
-pub async fn ipmi_host_put_handler(
-    Path(hostname): Path<String>,
-    State(config): State<Config>,
-    Json(body): Json<HostCommand>,
-) {
-    let host = &config.host[&hostname];
+// pub async fn ipmi_host_put_handler(
+//     Path(hostname): Path<String>,
+//     State(config): State<Config>,
+//     Json(body): Json<HostCommand>,
+// ) {
+//     let host = &config.host[&hostname];
 
-    let cmd = match body.power {
-        Some(true) => Some(ChassisControl::PowerUp),
-        Some(false) => Some(ChassisControl::PowerDown),
-        None => None,
-    };
+//     let cmd = match body.power {
+//         Some(true) => Some(ChassisControl::PowerUp),
+//         Some(false) => Some(ChassisControl::PowerDown),
+//         None => None,
+//     };
 
-    if let Some(cmd) = cmd {
-        ipmi_do(
-            &host.address,
-            &config.ipmi.username,
-            config.ipmi.password.as_ref().unwrap().as_bytes(),
-            move |ipmi| ipmi.send_recv(cmd).map_err(|e| anyhow::anyhow!("{:?}", e)),
-        )
-        .await
-        .unwrap();
-    }
-}
+//     if let Some(cmd) = cmd {
+//         ipmi_do(
+//             &host.address,
+//             &config.ipmi.username,
+//             config.ipmi.password.as_ref().unwrap().as_bytes(),
+//             move |ipmi| ipmi.send_recv(cmd).map_err(|e| anyhow::anyhow!("{:?}", e)),
+//         )
+//         .await
+//         .unwrap();
+//     }
+// }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Whoami {
-    name: String,
-    email: String,
-}
+// #[derive(Debug, Clone, Serialize)]
+// pub struct Whoami {
+//     name: String,
+//     email: String,
+// }
 
-pub async fn whoami_handler(headers: HeaderMap) -> Result<Json<Whoami>, StatusCode> {
-    let header_str = |name: &str| {
-        headers
-            .get(name)
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_owned)
-    };
+// pub async fn whoami_handler(headers: HeaderMap) -> Result<Json<Whoami>, StatusCode> {
+//     let header_str = |name: &str| {
+//         headers
+//             .get(name)
+//             .and_then(|v| v.to_str().ok())
+//             .map(str::to_owned)
+//     };
 
-    let name = header_str("Remote-Name");
-    let email = header_str("Remote-Email");
+//     let name = header_str("Remote-Name");
+//     let email = header_str("Remote-Email");
 
-    match (name, email) {
-        (Some(name), Some(email)) => Ok(Json(Whoami { name, email })),
-        _ => Err(StatusCode::SERVICE_UNAVAILABLE),
-    }
-}
+//     match (name, email) {
+//         (Some(name), Some(email)) => Ok(Json(Whoami { name, email })),
+//         _ => Err(StatusCode::SERVICE_UNAVAILABLE),
+//     }
+// }

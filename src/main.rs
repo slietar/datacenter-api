@@ -3,13 +3,17 @@
 mod binary_cache;
 mod comin;
 mod config;
-mod hosts;
+mod handlers;
 mod ipmi;
 mod manager;
 mod nar;
 mod pxe;
 mod store;
 mod state;
+
+mod protobuf {
+    tonic::include_proto!("protobuf");
+}
 
 use axum::Router;
 use axum::routing::{get, put};
@@ -23,7 +27,6 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
-use crate::hosts::{host_get_handler, ipmi_host_put_handler, ipmi_hosts_handler, whoami_handler};
 
 #[derive(rust_embed::RustEmbed, Clone)]
 #[folder = "web/dist"]
@@ -83,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         // .route("/whoami", get(whoami_handler))
         // .route("/hosts", get(ipmi_hosts_handler))
-        .route("/host/{hostname}", get(host_get_handler))
+        .route("/host/{hostname}", get(handlers::host_get_handler))
         // .route("/host/{hostname}/command", put(ipmi_host_put_handler))
         // .nest("/pxe", pxe::router(config.clone()))
         .fallback_service(serve_assets)

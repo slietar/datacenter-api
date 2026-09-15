@@ -4,13 +4,9 @@ use std::time::Duration;
 
 use tokio::sync::{Notify, watch};
 
-pub mod protobuf {
-    tonic::include_proto!("protobuf");
-}
-
-use protobuf::State;
-use protobuf::comin_client::CominClient;
-use protobuf::event::Type as EventType;
+use crate::protobuf::State;
+use crate::protobuf::comin_client::CominClient;
+use crate::protobuf::event::Type as EventType;
 
 pub type CominStateUpdate = Result<State, String>;
 
