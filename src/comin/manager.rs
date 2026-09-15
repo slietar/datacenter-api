@@ -8,7 +8,7 @@ use crate::protobuf::State;
 use crate::protobuf::comin_client::CominClient;
 use crate::protobuf::event::Type as EventType;
 
-pub type CominStateUpdate = Result<State, String>;
+pub type CominStateReading = anyhow::Result<State>;
 
 /// Connects to a `comin` (https://github.com/nlewo/comin) gRPC endpoint,
 /// broadcasting the current state and every subsequent update it streams.
@@ -17,7 +17,7 @@ pub type CominStateUpdate = Result<State, String>;
 #[derive(Debug)]
 pub struct CominManager {
     address: String,
-    sender: watch::Sender<Option<Arc<CominStateUpdate>>>,
+    sender: watch::Sender<Option<Arc<CominStateReading>>>,
     running: AtomicBool,
     /// Notified when a subscriber drops, so `run` can stop promptly instead
     /// of waiting for the current event stream to end on its own.
@@ -110,7 +110,7 @@ impl CominManager {
             .await;
 
             if let Err(error) = result {
-                let _ = self.sender.send(Some(Arc::new(Err(error.to_string()))));
+                let _ = self.sender.send(Some(Arc::new(Err(error))));
             }
 
             if self.sender.receiver_count() == 0 {
@@ -132,18 +132,18 @@ impl CominManager {
 /// these wakes up [`CominManager::run`] so it can stop right away.
 pub struct CominStateReceiver {
     manager: Arc<CominManager>,
-    receiver: watch::Receiver<Option<Arc<CominStateUpdate>>>,
+    receiver: watch::Receiver<Option<Arc<CominStateReading>>>,
 }
 
 impl CominStateReceiver {
-    pub fn borrow(&self) -> Arc<CominStateUpdate> {
+    pub fn borrow(&self) -> Arc<CominStateReading> {
         self.receiver
             .borrow()
             .clone()
             .expect("subscribe waits for the first state")
     }
 
-    pub async fn changed(&mut self) -> Result<Arc<CominStateUpdate>, watch::error::RecvError> {
+    pub async fn changed(&mut self) -> Result<Arc<CominStateReading>, watch::error::RecvError> {
         self.receiver.changed().await?;
 
         Ok(self.borrow())

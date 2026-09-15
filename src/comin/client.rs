@@ -1,28 +1,115 @@
-use serde::Serialize;
-
 use crate::protobuf;
+use serde::Serialize;
+use std::collections::HashMap;
 
-#[derive(Serialize)]
-pub struct CominState {
-    fetcher: Fetcher,
+pub type ClientStateReading = anyhow::Result<ClientState>;
+
+// #[derive(Debug, Clone, Serialize)]
+// #[serde(rename_all = "camelCase")]
+// pub struct Builder {
+//     pub building: bool,
+//     pub evaluating: bool,
+//     pub generation_uuid: String,
+// }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deployer {
+    pub booted_deployment_uuid: Option<String>,
+    pub deploying: bool,
+    pub deployments: HashMap<String, Deployment>,
+    pub switched_deployment_uuid: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Fetcher {
     pub fetching: bool,
     pub status: Option<FetcherStatus>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FetcherStatus {
     branch_error_message: Option<String>,
     branch_name: String,
     commit_message: String,
     commit_sha: String,
     error_message: Option<String>,
-    remote_fetch_time: u64,
+    remote_fetch_time: Option<u64>,
     remote_name: String,
     remote_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deployment {
+    pub end_time: Option<u64>,
+    pub start_time: Option<u64>,
+    pub uuid: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientState {
+    // builder: Builder,
+    deployer: Deployer,
+    fetcher: Fetcher,
+}
+
+impl std::convert::From<&protobuf::State> for ClientState {
+    fn from(state: &protobuf::State) -> Self {
+        let store = state.store.as_ref();
+
+        ClientState {
+            deployer: Deployer {
+                booted_deployment_uuid: store
+                    .map(|store| store.deployment_booted.clone())
+                    .filter(|uuid| !uuid.is_empty()),
+                deploying: state
+                    .deployer
+                    .as_ref()
+                    .map(|deployer| deployer.is_deploying.unwrap_or(false))
+                    .unwrap_or(false),
+                deployments: store
+                    .map(|store| {
+                        store
+                            .deployments
+                            .iter()
+                            .map(|deployment| (deployment.uuid.clone(), deployment.into()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                switched_deployment_uuid: store
+                    .map(|store| store.deployment_switched.clone())
+                    .filter(|uuid| !uuid.is_empty()),
+            },
+            fetcher: state
+                .fetcher
+                .as_ref()
+                .map(Fetcher::from)
+                .unwrap_or(Fetcher {
+                    fetching: false,
+                    status: None,
+                }),
+        }
+    }
+}
+
+impl std::convert::From<&protobuf::Deployment> for Deployment {
+    fn from(deployment: &protobuf::Deployment) -> Self {
+        Deployment {
+            end_time: deployment
+                .ended_at
+                .as_ref()
+                .map(|timestamp| (timestamp.seconds * 1000) as u64),
+            start_time: deployment
+                .started_at
+                .as_ref()
+                .map(|timestamp| (timestamp.seconds * 1000) as u64),
+            uuid: deployment.uuid.clone(),
+        }
+    }
 }
 
 impl std::convert::From<&protobuf::Fetcher> for Fetcher {
@@ -52,8 +139,7 @@ impl std::convert::From<&protobuf::GitRepositoryStatus> for FetcherStatus {
             .unwrap();
 
         FetcherStatus {
-            branch_error_message: (!branch.error_msg.is_empty())
-                .then(|| branch.error_msg.clone()),
+            branch_error_message: (!branch.error_msg.is_empty()).then(|| branch.error_msg.clone()),
             branch_name: status.selected_branch_name.clone(),
             commit_message: status.selected_commit_msg.clone(),
             commit_sha: status.selected_commit_id.clone(),
@@ -61,8 +147,7 @@ impl std::convert::From<&protobuf::GitRepositoryStatus> for FetcherStatus {
             remote_fetch_time: remote
                 .fetched_at
                 .as_ref()
-                .map(|timestamp| timestamp.seconds.max(0) as u64)
-                .unwrap_or(0),
+                .map(|timestamp| (timestamp.seconds * 1000) as u64),
             remote_name: status.selected_remote_name.clone(),
             remote_url: remote.url.clone(),
         }

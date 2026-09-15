@@ -1,4 +1,3 @@
-use crate::comin::manager::{CominStateUpdate};
 use crate::config::Config;
 use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
 
@@ -13,8 +12,34 @@ use std::collections::HashMap;
 
 use ipmi_rs::sensor_event::GetSensorReading;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HostState {
+#[derive(Debug, Clone, Serialize)]
+pub struct ClientError {
+    message: String,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum ClientResult<T> {
+    Ok(T),
+    Err(ClientError),
+}
+
+impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
+    fn from(result: anyhow::Result<T>) -> Self {
+        match result {
+            Ok(value) => ClientResult::Ok(value),
+            Err(err) => ClientResult::Err(ClientError {
+                message: err.to_string(),
+                reason: err.root_cause().to_string(),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HostClientState {
+    comin: Option<ClientResult<crate::comin::client::ClientState>>,
     ipmi: Option<IpmiState>,
 }
 
@@ -55,10 +80,10 @@ where
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct HostList {
-    hosts: HashMap<String, Either<HostState, Error>>,
-}
+// #[derive(Debug, Clone, Serialize)]
+// pub struct HostList {
+//     hosts: HashMap<String, Either<HostClientState, Error>>,
+// }
 
 use ipmi_rs::Ipmi;
 use ipmi_rs::rmcp::Rmcp;
@@ -105,7 +130,7 @@ pub(crate) fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<IpmiState
 pub async fn host_get_handler(
     Path(hostname): Path<String>,
     State(state): State<crate::state::State>,
-) -> Result<Json<HostState>, StatusCode> {
+) -> Result<Json<HostClientState>, StatusCode> {
     let host_manager = state
         .host_managers
         .get(&hostname)
@@ -114,11 +139,7 @@ pub async fn host_get_handler(
     let comin_state = host_manager
         .get_comin_state()
         .await
-        .transpose()
-        .map_err(|e| {
-            tracing::error!("Error getting COMIN state for host {}: {:?}", hostname, e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+        .map(ClientResult::from);
 
     let ipmi_state = host_manager
         .get_ipmi_state()
@@ -129,9 +150,8 @@ pub async fn host_get_handler(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    eprintln!("{:#?}", comin_state);
-
-    Ok(Json(HostState {
+    Ok(Json(HostClientState {
+        comin: comin_state,
         ipmi: ipmi_state,
     }))
 }

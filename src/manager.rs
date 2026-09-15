@@ -1,4 +1,5 @@
-use crate::comin::manager::{CominManager, CominStateUpdate};
+use crate::comin::client::{ClientState, ClientStateReading};
+use crate::comin::manager::CominManager;
 use crate::ipmi::manager::{IpmiManager, IpmiReading};
 use crate::handlers::{IpmiState, read_host_state};
 
@@ -37,11 +38,15 @@ impl HostManager {
         }
     }
 
-    pub async fn get_comin_state(&self) -> Option<CominStateUpdate> {
+    pub async fn get_comin_state(&self) -> Option<ClientStateReading> {
         let comin_manager = self.comin_manager.as_ref()?;
         let receiver = comin_manager.subscribe().await;
+        let state = receiver.borrow();
 
-        Some((*receiver.borrow()).clone())
+        Some(match state.as_ref() {
+            Ok(state) => Ok(ClientState::from(state)),
+            Err(err) => Err(anyhow::anyhow!("{}", err)),
+        })
     }
 
     pub async fn get_ipmi_state(&self) -> Option<IpmiReading> {
