@@ -138,7 +138,7 @@ struct Control {
 
 impl<S: StateSource> LiveState<S> {
     pub fn new(source: S) -> Self {
-        Self::with_options(source, Options::default())
+        Self::with_options(source, Default::default())
     }
 
     pub fn with_options(source: S, options: Options) -> Self {

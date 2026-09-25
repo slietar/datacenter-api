@@ -109,26 +109,13 @@ pub async fn host_get_handler(
 
     let comin_state = host_manager.get_comin_state().await.map(ClientResult::from);
 
-    let headscale_state = futures::future::OptionFuture::from(
-        state.headscale_manager.as_ref().map(async |manager| {
-            let state = manager.get_state().await?;
-
-            Ok(state
-                .nodes
-                .iter()
-                .find(|node_state| {
-                    node_state
-                        .ip_addresses
-                        .contains(&host_manager.host_config.address)
-                })
-                .map(|node_state| crate::headscale::client::NodeState {
-                    node: node_state.into(),
-                    user: (&node_state.user).into(),
-                }))
-        }),
-    )
-    .await
-    .map(ClientResult::from);
+    let headscale_state = match &state.headscale_manager {
+        Some(manager) => Some(crate::headscale::client::NodeState::from_reading(
+            &manager.get().await,
+            &host_manager.host_config.address,
+        )),
+        None => None,
+    };
 
     let ipmi_state = host_manager
         .get_ipmi_state()

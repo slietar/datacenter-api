@@ -10,6 +10,7 @@ mod ipmi;
 mod live_state;
 mod manager;
 mod nar;
+mod polling_state;
 mod pxe;
 mod state;
 mod store;

@@ -40,7 +40,6 @@ impl<T: Serialize> Serialize for ClientResult<T> {
             ClientResult::Err(e) => {
                 st.serialize_field("ok", &false)?;
                 st.serialize_field("error", e)?;
-                st.serialize_field("value", &Option::<T>::None)?;
             }
             ClientResult::Partial { error, value } => {
                 st.serialize_field("ok", &false)?;

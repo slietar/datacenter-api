@@ -2,6 +2,10 @@ use serde;
 use serde::Serialize;
 use std::collections::HashMap;
 
+use crate::client::{ClientError, ClientResult};
+use crate::headscale::manager::HeadscaleReading;
+use crate::live_state::Fallible;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Node {
@@ -39,6 +43,32 @@ pub struct State {
 pub struct NodeState {
     pub node: Node,
     pub user: User,
+}
+
+impl NodeState {
+    /// Finds the node whose IP addresses include `address` in `reading`, if
+    /// any.
+    pub fn from_reading(reading: &HeadscaleReading, address: &str) -> ClientResult<Option<Self>> {
+        let find = |nodes: &crate::headscale::node::NodesResponse| {
+            nodes
+                .nodes
+                .iter()
+                .find(|node| node.ip_addresses.iter().any(|ip| ip == address))
+                .map(|node| NodeState {
+                    node: Node::from(node),
+                    user: User::from(&node.user),
+                })
+        };
+
+        match reading {
+            Fallible::Ok(nodes) => ClientResult::Ok(find(nodes)),
+            Fallible::Partial { value, .. } => ClientResult::Partial {
+                error: ClientError::unknown(),
+                value: find(value),
+            },
+            Fallible::Err(_) => ClientResult::Err(ClientError::unknown()),
+        }
+    }
 }
 
 impl std::convert::From<&crate::headscale::node::Node> for Node {
