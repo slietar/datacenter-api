@@ -44,7 +44,7 @@ impl HostManager {
         }
     }
 
-    pub async fn get_comin_state(&self) -> Option<Arc<comin::manager::CominStateReading>> {
+    pub async fn get_comin_state(&self) -> Option<comin::manager::CominReading> {
         let comin_manager = self.comin_manager.as_ref()?;
 
         Some(comin_manager.get().await)

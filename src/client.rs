@@ -12,6 +12,8 @@ pub struct ClientError {
 }
 
 impl ClientError {
+    /// A `ClientError` that doesn't leak any detail of the underlying error
+    /// to the client.
     pub fn unknown() -> Self {
         Self {
             message: "Unknown error".into(),
@@ -24,6 +26,7 @@ impl ClientError {
 pub enum ClientResult<T> {
     Ok(T),
     Err(ClientError),
+    Partial { error: ClientError, value: T },
 }
 
 impl<T: Serialize> Serialize for ClientResult<T> {
@@ -37,9 +40,24 @@ impl<T: Serialize> Serialize for ClientResult<T> {
             ClientResult::Err(e) => {
                 st.serialize_field("ok", &false)?;
                 st.serialize_field("error", e)?;
+                st.serialize_field("value", &Option::<T>::None)?;
+            }
+            ClientResult::Partial { error, value } => {
+                st.serialize_field("ok", &false)?;
+                st.serialize_field("error", error)?;
+                st.serialize_field("value", value)?;
             }
         }
         st.end()
+    }
+}
+
+impl std::convert::From<&anyhow::Error> for ClientError {
+    fn from(err: &anyhow::Error) -> Self {
+        Self {
+            message: err.to_string().into(),
+            reason: err.root_cause().to_string().into(),
+        }
     }
 }
 
@@ -47,10 +65,7 @@ impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
     fn from(result: anyhow::Result<T>) -> Self {
         match result {
             Ok(value) => ClientResult::Ok(value),
-            Err(err) => ClientResult::Err(ClientError {
-                message: err.to_string().into(),
-                reason: err.root_cause().to_string().into(),
-            }),
+            Err(err) => ClientResult::Err(ClientError::from(&err)),
         }
     }
 }

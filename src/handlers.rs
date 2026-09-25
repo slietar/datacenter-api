@@ -2,6 +2,7 @@ use crate::client::{ClientError, ClientResult, HostClientState};
 use crate::comin;
 use crate::config::Config;
 use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
+use crate::live_state::Fallible;
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -10,10 +11,9 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::FutureExt;
 use futures::TryFutureExt;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
+use ipmi_rs::sensor_event::GetSensorReading;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-use ipmi_rs::sensor_event::GetSensorReading;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpmiState {
@@ -99,6 +99,21 @@ pub(crate) fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<IpmiState
     })
 }
 
+/// Converts a comin reading into a [`ClientResult`], keeping the last known
+/// good state visible to clients even while the source is erroring.
+fn comin_client_result(
+    reading: comin::manager::CominReading,
+) -> ClientResult<comin::client::State> {
+    match reading {
+        Fallible::Ok(state) => ClientResult::Ok(comin::client::State::from(state.as_ref())),
+        Fallible::Partial { value, .. } => ClientResult::Partial {
+            error: ClientError::unknown(),
+            value: comin::client::State::from(value.as_ref()),
+        },
+        Fallible::Err(_) => ClientResult::Err(ClientError::unknown()),
+    }
+}
+
 pub async fn host_get_handler(
     Path(name): Path<String>,
     State(state): State<crate::state::State>,
@@ -108,14 +123,10 @@ pub async fn host_get_handler(
         .get(&name)
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let comin_state =
-        host_manager
-            .get_comin_state()
-            .await
-            .map(|state| match state.as_ref().as_ref() {
-                Ok(state) => ClientResult::Ok(comin::client::State::from(state)),
-                Err(_) => ClientResult::Err(ClientError::unknown()),
-            });
+    let comin_state = host_manager
+        .get_comin_state()
+        .await
+        .map(comin_client_result);
 
     let headscale_state = futures::future::OptionFuture::from(
         state.headscale_manager.as_ref().map(async |manager| {
@@ -171,13 +182,8 @@ pub async fn host_sse_handler(
             .await
             .into_stream()
             .map(|reading| {
-                let comin_state = match reading.as_ref() {
-                    Ok(state) => ClientResult::Ok(comin::client::State::from(state)),
-                    Err(_) => ClientResult::Err(ClientError::unknown()),
-                };
-
                 Event::default().json_data(&HostClientState {
-                    comin: Some(comin_state),
+                    comin: Some(comin_client_result(reading)),
                     ipmi: None,
                     headscale: None,
                 })
