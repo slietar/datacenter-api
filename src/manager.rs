@@ -1,5 +1,4 @@
 use crate::comin;
-use crate::comin::client::{State, StateReading};
 use crate::comin::manager::CominManager;
 use crate::handlers::{IpmiState, read_host_state};
 use crate::ipmi::manager::{IpmiManager, IpmiReading};
