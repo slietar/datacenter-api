@@ -1,17 +1,18 @@
 #![allow(unused)]
 
 mod binary_cache;
+mod client;
 mod comin;
 mod config;
 mod handlers;
 mod headscale;
 mod ipmi;
+mod live_state;
 mod manager;
 mod nar;
 mod pxe;
 mod state;
 mod store;
-mod client;
 
 mod protobuf {
     tonic::include_proto!("protobuf");

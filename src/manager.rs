@@ -46,10 +46,8 @@ impl HostManager {
 
     pub async fn get_comin_state(&self) -> Option<Arc<comin::manager::CominStateReading>> {
         let comin_manager = self.comin_manager.as_ref()?;
-        let receiver = comin_manager.subscribe().await;
-        let state = receiver.borrow();
 
-        Some(state)
+        Some(comin_manager.get().await)
     }
 
     pub async fn get_ipmi_state(&self) -> Option<IpmiReading> {

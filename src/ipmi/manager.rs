@@ -6,7 +6,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{Notify, broadcast};
 
-
 pub type IpmiReading = Result<IpmiState, String>;
 
 /// Polls a host's IPMI state on a fixed interval over a single long-lived

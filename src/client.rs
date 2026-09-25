@@ -1,29 +1,46 @@
 use serde::Serialize;
-use serde::Serializer;
+use serde::ser::{SerializeStruct, Serializer};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::handlers::IpmiState;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ClientError {
-    message: String,
-    reason: String,
+    message: Cow<'static, str>,
+    reason: Cow<'static, str>,
 }
 
 impl ClientError {
     pub fn unknown() -> Self {
         Self {
-            message: "Unknown error".to_owned(),
-            reason: "Unknown".to_owned(),
+            message: "Unknown error".into(),
+            reason: "unknown".into(),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-// #[serde(untagged)]
+#[derive(Debug, Clone)]
 pub enum ClientResult<T> {
     Ok(T),
     Err(ClientError),
+}
+
+impl<T: Serialize> Serialize for ClientResult<T> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut st = s.serialize_struct("ClientResult", 2)?;
+        match self {
+            ClientResult::Ok(v) => {
+                st.serialize_field("ok", &true)?;
+                st.serialize_field("value", v)?;
+            }
+            ClientResult::Err(e) => {
+                st.serialize_field("ok", &false)?;
+                st.serialize_field("error", e)?;
+            }
+        }
+        st.end()
+    }
 }
 
 impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
@@ -31,8 +48,8 @@ impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
         match result {
             Ok(value) => ClientResult::Ok(value),
             Err(err) => ClientResult::Err(ClientError {
-                message: err.to_string(),
-                reason: err.root_cause().to_string(),
+                message: err.to_string().into(),
+                reason: err.root_cause().to_string().into(),
             }),
         }
     }
