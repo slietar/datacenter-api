@@ -1,4 +1,3 @@
-use std::future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -65,14 +64,28 @@ impl StateSource for CominSource {
         let events = client.events(()).await?.into_inner();
         let state = client.get_state(()).await?.into_inner();
 
-        let updates = events.filter_map(|event| {
-            future::ready(match event {
-                Ok(event) => match event.r#type {
-                    Some(EventType::ManagerState(manager_state)) => manager_state.state.map(Ok),
-                    _ => None,
-                },
-                Err(status) => Some(Err(status.into())),
-            })
+        let updates = events.filter_map(move |event| {
+            let mut client = client.clone();
+
+            async move {
+                match event {
+                    Ok(event) => match event.r#type {
+                        Some(EventType::ManagerState(manager_state)) => {
+                            tracing::debug!("received manager state update");
+                            manager_state.state.map(Ok)
+                        }
+                        Some(_) => {
+                            tracing::debug!("received event of type other than ManagerState");
+                            match client.get_state(()).await {
+                                Ok(response) => Some(Ok(response.into_inner())),
+                                Err(status) => Some(Err(status.into())),
+                            }
+                        }
+                        None => None,
+                    },
+                    Err(status) => Some(Err(status.into())),
+                }
+            }
         });
 
         Ok((state, updates.boxed()))

@@ -6,9 +6,10 @@ use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolic
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::FutureExt;
 use futures::TryFutureExt;
-use futures::stream::{self, StreamExt};
+use futures::stream::{self, BoxStream, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -151,6 +152,48 @@ pub async fn host_get_handler(
         ipmi: ipmi_state,
         headscale: headscale_state,
     }))
+}
+
+pub async fn host_sse_handler(
+    Path(name): Path<String>,
+    State(state): State<crate::state::State>,
+) -> Result<Sse<impl Stream<Item = Result<Event, axum::Error>>>, StatusCode> {
+    let comin_manager = state
+        .host_managers
+        .get(&name)
+        .ok_or(StatusCode::NOT_FOUND)?
+        .comin_manager
+        .clone();
+
+    let stream: BoxStream<'static, Result<Event, axum::Error>> = match comin_manager {
+        Some(comin_manager) => comin_manager
+            .subscribe()
+            .await
+            .into_stream()
+            .map(|reading| {
+                let comin_state = match reading.as_ref() {
+                    Ok(state) => ClientResult::Ok(comin::client::State::from(state)),
+                    Err(_) => ClientResult::Err(ClientError::unknown()),
+                };
+
+                Event::default().json_data(&HostClientState {
+                    comin: Some(comin_state),
+                    ipmi: None,
+                    headscale: None,
+                })
+            })
+            .boxed(),
+        None => stream::once(async {
+            Event::default().json_data(&HostClientState {
+                comin: None,
+                ipmi: None,
+                headscale: None,
+            })
+        })
+        .boxed(),
+    };
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
 // pub async fn ipmi_hosts_handler(State(config): State<Config>) -> Json<HostList> {

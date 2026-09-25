@@ -53,7 +53,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(EnvFilter::from_default_env().add_directive("h2=info".parse().unwrap()))
         .compact()
         .init();
 
@@ -96,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
         // .route("/whoami", get(whoami_handler))
         // .route("/hosts", get(ipmi_hosts_handler))
         .route("/host/{hostname}", get(handlers::host_get_handler))
+        .route("/host/{hostname}/events", get(handlers::host_sse_handler))
         // .route("/host/{hostname}/command", put(ipmi_host_put_handler))
         // .nest("/pxe", pxe::router(config.clone()))
         .fallback_service(serve_assets)
