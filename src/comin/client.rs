@@ -2,7 +2,7 @@ use crate::protobuf;
 use serde::Serialize;
 use std::collections::HashMap;
 
-pub type ClientStateReading = anyhow::Result<ClientState>;
+pub type StateReading = Option<State>;
 
 // #[derive(Debug, Clone, Serialize)]
 // #[serde(rename_all = "camelCase")]
@@ -17,6 +17,7 @@ pub type ClientStateReading = anyhow::Result<ClientState>;
 pub struct Deployer {
     pub booted_deployment_uuid: Option<String>,
     pub deploying: bool,
+    #[serde(serialize_with = "crate::client::ordered_map")]
     pub deployments: HashMap<String, Deployment>,
     pub switched_deployment_uuid: Option<String>,
 }
@@ -51,17 +52,17 @@ pub struct Deployment {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ClientState {
+pub struct State {
     // builder: Builder,
     deployer: Deployer,
     fetcher: Fetcher,
 }
 
-impl std::convert::From<&protobuf::State> for ClientState {
+impl std::convert::From<&protobuf::State> for State {
     fn from(state: &protobuf::State) -> Self {
         let store = state.store.as_ref();
 
-        ClientState {
+        State {
             deployer: Deployer {
                 booted_deployment_uuid: store
                     .map(|store| store.deployment_booted.clone())

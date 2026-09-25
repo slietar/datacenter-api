@@ -11,6 +11,7 @@ mod nar;
 mod pxe;
 mod state;
 mod store;
+mod client;
 
 mod protobuf {
     tonic::include_proto!("protobuf");
@@ -74,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
         .host
         .iter()
         .map(|(host_name, host_config)| {
-            let manager = manager::HostManager::new(&config, host_config);
+            let manager = manager::HostManager::new(host_name, &config, host_config);
             (host_name.clone(), manager)
         })
         .collect::<HashMap<_, _>>();

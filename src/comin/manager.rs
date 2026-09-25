@@ -17,6 +17,7 @@ pub type CominStateReading = anyhow::Result<State>;
 #[derive(Debug)]
 pub struct CominManager {
     address: String,
+    name: String,
     sender: watch::Sender<Option<Arc<CominStateReading>>>,
     running: AtomicBool,
     /// Notified when a subscriber drops, so `run` can stop promptly instead
@@ -25,11 +26,12 @@ pub struct CominManager {
 }
 
 impl CominManager {
-    pub fn new(address: String) -> Self {
+    pub fn new(name: String, address: String) -> Self {
         let (sender, _) = watch::channel(None);
 
         Self {
             address,
+            name,
             sender,
             running: AtomicBool::new(false),
             stop: Notify::new(),
@@ -110,6 +112,7 @@ impl CominManager {
             .await;
 
             if let Err(error) = result {
+                tracing::error!(host_name = %self.name, ?error, "error streaming comin state");
                 let _ = self.sender.send(Some(Arc::new(Err(error))));
             }
 

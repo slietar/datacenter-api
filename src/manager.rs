@@ -1,7 +1,8 @@
-use crate::comin::client::{ClientState, ClientStateReading};
+use crate::comin;
+use crate::comin::client::{State, StateReading};
 use crate::comin::manager::CominManager;
-use crate::ipmi::manager::{IpmiManager, IpmiReading};
 use crate::handlers::{IpmiState, read_host_state};
+use crate::ipmi::manager::{IpmiManager, IpmiReading};
 
 use ipmi_rs::Ipmi;
 use ipmi_rs::rmcp::Rmcp;
@@ -18,7 +19,11 @@ pub struct HostManager {
 }
 
 impl HostManager {
-    pub fn new(config: &crate::config::Config, host_config: &crate::config::Host) -> Self {
+    pub fn new(
+        name: &str,
+        config: &crate::config::Config,
+        host_config: &crate::config::Host,
+    ) -> Self {
         Self {
             config: config.clone(),
             host_config: host_config.clone(),
@@ -32,21 +37,19 @@ impl HostManager {
             }),
             comin_manager: host_config.comin.then(|| {
                 Arc::new(CominManager::new(
+                    name.to_string(),
                     host_config.address.clone(),
                 ))
             }),
         }
     }
 
-    pub async fn get_comin_state(&self) -> Option<ClientStateReading> {
+    pub async fn get_comin_state(&self) -> Option<Arc<comin::manager::CominStateReading>> {
         let comin_manager = self.comin_manager.as_ref()?;
         let receiver = comin_manager.subscribe().await;
         let state = receiver.borrow();
 
-        Some(match state.as_ref() {
-            Ok(state) => Ok(ClientState::from(state)),
-            Err(err) => Err(anyhow::anyhow!("{}", err)),
-        })
+        Some(state)
     }
 
     pub async fn get_ipmi_state(&self) -> Option<IpmiReading> {

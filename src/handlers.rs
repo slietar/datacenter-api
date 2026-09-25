@@ -1,3 +1,5 @@
+use crate::client::{ClientError, ClientResult, HostClientState};
+use crate::comin;
 use crate::config::Config;
 use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
 
@@ -11,38 +13,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use ipmi_rs::sensor_event::GetSensorReading;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ClientError {
-    message: String,
-    reason: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-// #[serde(untagged)]
-pub enum ClientResult<T> {
-    Ok(T),
-    Err(ClientError),
-}
-
-impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
-    fn from(result: anyhow::Result<T>) -> Self {
-        match result {
-            Ok(value) => ClientResult::Ok(value),
-            Err(err) => ClientResult::Err(ClientError {
-                message: err.to_string(),
-                reason: err.root_cause().to_string(),
-            }),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct HostClientState {
-    comin: Option<ClientResult<crate::comin::client::ClientState>>,
-    headscale: Option<ClientResult<Option<crate::headscale::client::NodeState>>>,
-    ipmi: Option<IpmiState>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpmiState {
@@ -137,29 +107,35 @@ pub async fn host_get_handler(
         .get(&name)
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let comin_state = host_manager.get_comin_state().await.map(ClientResult::from);
+    let comin_state =
+        host_manager
+            .get_comin_state()
+            .await
+            .map(|state| match state.as_ref().as_ref() {
+                Ok(state) => ClientResult::Ok(comin::client::State::from(state)),
+                Err(_) => ClientResult::Err(ClientError::unknown()),
+            });
 
-    let headscale_state =
-        futures::future::OptionFuture::from(state.headscale_manager.as_ref().map(
-            async |manager|  {
-                let state = manager.get_state().await?;
+    let headscale_state = futures::future::OptionFuture::from(
+        state.headscale_manager.as_ref().map(async |manager| {
+            let state = manager.get_state().await?;
 
-                Ok(state
-                    .nodes
-                    .iter()
-                    .find(|node_state| {
-                        node_state
-                            .ip_addresses
-                            .contains(&host_manager.host_config.address)
-                    })
-                    .map(|node_state| crate::headscale::client::NodeState {
-                        node: node_state.into(),
-                        user: (&node_state.user).into(),
-                    }))
-            },
-        ))
-        .await
-        .map(ClientResult::from);
+            Ok(state
+                .nodes
+                .iter()
+                .find(|node_state| {
+                    node_state
+                        .ip_addresses
+                        .contains(&host_manager.host_config.address)
+                })
+                .map(|node_state| crate::headscale::client::NodeState {
+                    node: node_state.into(),
+                    user: (&node_state.user).into(),
+                }))
+        }),
+    )
+    .await
+    .map(ClientResult::from);
 
     let ipmi_state = host_manager
         .get_ipmi_state()
