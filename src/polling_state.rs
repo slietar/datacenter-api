@@ -9,7 +9,9 @@ use crate::live_state::{LiveState, Options, Reading, StateSource, Subscription};
 /// Something a [`PollingLiveState`] can fetch state from by being asked,
 /// rather than by pushing updates of its own.
 pub trait Poller: Send + Sync + 'static {
-    type State: Send + Sync + std::fmt::Debug + 'static;
+    /// Required to implement [`PartialEq`] by [`StateSource::State`], see
+    /// there for why.
+    type State: Send + Sync + std::fmt::Debug + PartialEq + 'static;
     /// The error type yielded when a poll fails, left to the implementor
     /// since it depends on the source.
     type Error: Send + Sync + std::fmt::Debug + 'static;

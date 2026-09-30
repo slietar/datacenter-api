@@ -46,7 +46,9 @@ pub type Reading<T, E> = Fallible<Arc<T>, Arc<E>>;
 
 /// Something a [`LiveState`] can fetch a state from and listen to for changes.
 pub trait StateSource: Send + Sync + 'static {
-    type State: Send + Sync + 'static;
+    /// Required to implement [`PartialEq`] so that an update identical to
+    /// the current state doesn't notify listeners.
+    type State: Send + Sync + PartialEq + 'static;
     /// The error type yielded on connection or stream failure, left to the
     /// implementor since it depends on the source (e.g. `anyhow::Error` for a
     /// source with ad hoc failures, or a specific error type for one backed
@@ -241,9 +243,22 @@ async fn follow<S: StateSource>(
     // A new state replaces the previous one and clears any error. An error
     // is recorded alongside whatever state is already there, so listeners
     // keep the last good state instead of losing it.
+    //
+    // A state equal to the current one doesn't notify listeners, so a
+    // source that's re-polled or re-connected doesn't wake them up with
+    // nothing new to show. A state clearing an error is always published,
+    // even if equal to the last good one, since the error going away is
+    // itself news.
     let publish_state = |state: S::State| {
-        shared.state.send_modify(|reading| {
+        shared.state.send_if_modified(|reading| {
+            if let Some(Reading::Ok(existing)) = reading.as_ref()
+                && existing.as_ref() == &state
+            {
+                return false;
+            }
+
             *reading = Some(Reading::Ok(Arc::new(state)));
+            true
         });
     };
 
@@ -581,6 +596,22 @@ mod tests {
             () = std::future::ready(()) => {}
         }
         assert_eq!(state.shared.control.borrow().listeners, 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn identical_updates_do_not_notify() {
+        let (source, updates) = TestSource::new(0);
+        let state = LiveState::with_options(source, options());
+
+        let mut subscription = state.subscribe().await;
+        assert_eq!(**subscription.get().value().unwrap(), 1);
+
+        updates.send(Ok(1)).unwrap();
+        tokio::task::yield_now().await;
+        assert!(!subscription.receiver.has_changed().unwrap());
+
+        updates.send(Ok(2)).unwrap();
+        assert_eq!(**subscription.changed().await.value().unwrap(), 2);
     }
 
     #[tokio::test(start_paused = true)]
