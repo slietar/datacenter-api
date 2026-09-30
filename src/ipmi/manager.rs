@@ -2,6 +2,7 @@ use crate::handlers::{IpmiState, read_host_state};
 
 use ipmi_rs::Ipmi;
 use ipmi_rs::rmcp::Rmcp;
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{Notify, broadcast};
@@ -57,7 +58,12 @@ impl IpmiManager {
     }
 
     fn connect(&self) -> Result<Ipmi<Rmcp>, String> {
-        let mut rmcp = Rmcp::new((self.address.as_str(), 623), Duration::from_secs(1))
+        let ipv6 = match self.address.parse().unwrap() {
+            IpAddr::V4(v4) => v4.to_ipv6_mapped(),
+            IpAddr::V6(v6) => v6,
+        };
+
+        let mut rmcp = Rmcp::new((ipv6, 623), Duration::from_secs(1))
             .map_err(|e| format!("{:?}", e))?;
 
         rmcp.activate(true, Some(&self.username), Some(&self.password))

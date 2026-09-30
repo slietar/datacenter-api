@@ -8,6 +8,8 @@ use ipmi_rs::connection::Message;
 use ipmi_rs::connection::NetFn;
 use ipmi_rs::connection::NotEnoughData;
 use ipmi_rs::rmcp::Rmcp;
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 #[derive(Copy, Clone, Debug)]
