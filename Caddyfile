@@ -1,0 +1,6 @@
+:8081 {
+	reverse_proxy localhost:8080 {
+		header_up Remote-Name "Sim"
+		header_up Remote-Email "simon@lietar.net"
+	}
+}
