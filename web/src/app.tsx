@@ -1,5 +1,9 @@
 import { Component, type ReactNode } from 'react';
 
+import { handleHomePage } from './pages/home.js';
+
+import './App.css';
+
 export type PossiblyPromise<T> = Promise<T> | T;
 export type Handler = (
   params: Record<string, string>,
@@ -23,8 +27,8 @@ export interface AppProps { }
 
 export interface AppState {
   loading: {
-    // // Only used for initial asynchronous navigations
-    // controller: AbortController | null;
+    // Only used for initial asynchronous navigations
+    controller: AbortController | null;
 
     signal: AbortSignal;
   } | null;
@@ -38,29 +42,19 @@ export default class App extends Component<AppProps, AppState> {
     pattern: URLPattern;
   }[];
 
+  pendingHandlerResult: Promise<HandleResult> | null = null;
+
   constructor(props: AppProps) {
     super(props);
 
     this.routes = [
       {
         pattern: new URLPattern({ baseURL: location.href, pathname: '/' }),
-        handler: () => ({
-          contents: (
-            <div>
-              <h1>Home</h1>
-              <a href="/slow">Go to Slow Page</a>
-            </div>
-          ),
-          title: 'Home',
-        }),
+        handler: handleHomePage,
       },
       {
         pattern: new URLPattern({ baseURL: location.href, pathname: '/slow' }),
         handler: async (_params, _state, options) => {
-          options.signal.addEventListener('abort', () => {
-            console.log('Navigation aborted');
-          });
-
           await new Promise<void>((resolve, reject) => {
             let timeout = setTimeout(() => void resolve(), 1000);
 
@@ -83,19 +77,37 @@ export default class App extends Component<AppProps, AppState> {
       }
     ];
 
+    let initialResult = this.handleRoute(
+      new URL(window.location.href),
+      window.navigation.currentEntry?.getState(),
+      new AbortController().signal,
+    );
+
+    let loading = null;
+    let page = null;
+
+    if (initialResult instanceof Promise) {
+      let controller = new AbortController();
+      loading = { controller, signal: controller.signal };
+      this.pendingHandlerResult = initialResult;
+    } else {
+      document.title = initialResult.title;
+      page = initialResult.contents;
+    }
+
     this.state = {
-      loading: null,
-      page: null,
+      loading,
+      page,
     };
   }
 
-  handleRoute(url: URL, navigationEntryState: unknown): PossiblyPromise<HandleResult> {
+  handleRoute(url: URL, navigationEntryState: unknown, signal: AbortSignal): PossiblyPromise<HandleResult> {
     for (let route of this.routes) {
       let patternMatch = route.pattern.exec(url);
 
       if (patternMatch) {
         let params = patternMatch.pathname.groups as Record<string, string>;
-        return route.handler(params, navigationEntryState, { signal: new AbortController().signal });
+        return route.handler(params, navigationEntryState, { signal });
       }
     }
 
@@ -119,16 +131,28 @@ export default class App extends Component<AppProps, AppState> {
 
   override componentDidMount() {
     this.controller = new AbortController();
-    let signal = this.controller.signal;
+    let appSignal = this.controller.signal;
 
-    // Initial route
-    Promise.resolve(this.handleRoute(new URL(window.location.href), window.navigation.currentEntry?.getState()))
-      .then((result) => {
-        if (!signal.aborted) {
-          document.title = result.title;
-          this.setState({ loading: null, page: result.contents });
+    if (this.pendingHandlerResult) {
+      let controller = this.state.loading!.controller!;
+
+      this.pendingHandlerResult.then((result) => {
+        if (controller.signal.aborted) {
+          return;
         }
+
+        document.title = result.title;
+        this.setState({ loading: null, page: result.contents });
+      }, (err) => {
+        if (controller.signal.aborted && err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+
+        console.error(err);
       });
+
+      this.pendingHandlerResult = null;
+    }
 
     window.navigation.addEventListener('navigate', (event) => {
       if (!event.canIntercept) {
@@ -143,18 +167,27 @@ export default class App extends Component<AppProps, AppState> {
         return;
       }
 
+      let initialNavigationController = this.state.loading?.controller;
+
+      if (initialNavigationController) {
+        initialNavigationController.abort();
+      }
+
       let url = new URL(event.destination.url);
 
       event.intercept({
         scroll: 'manual',
         handler: async () => {
-          // Keep the previous page rendered (but inert) while the next one loads.
-          this.setState({ loading: { signal: event.signal } });
+          this.setState({
+            loading: {
+              controller: null,
+              signal: event.signal,
+            },
+          });
 
-          let result = await this.handleRoute(url, event.destination.getState());
+          let result = await this.handleRoute(url, event.destination.getState(), event.signal);
 
-          // Skip if this navigation was superseded or the component unmounted.
-          if (event.signal.aborted || signal.aborted) {
+          if (event.signal.aborted || appSignal.aborted) {
             return;
           }
 
@@ -167,14 +200,14 @@ export default class App extends Component<AppProps, AppState> {
 
       event.signal.addEventListener('abort', () => {
         this.setState({ loading: null });
-      }, { signal });
-    }, { signal });
+      }, { signal: appSignal });
+    }, { signal: appSignal });
 
 
     document.addEventListener('scroll', () => {
       let scrollTop = document.documentElement.scrollTop;
       localStorage.setItem('scrollTop', scrollTop.toString());
-    }, { signal });
+    }, { signal: appSignal });
 
     let savedScrollTop = parseInt(localStorage.getItem('scrollTop') ?? '0', 10);
 
