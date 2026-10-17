@@ -7,6 +7,7 @@ use std::collections::HashMap;
 pub struct IpmiState {
     pub power_is_on: bool,
     pub power_restore_policy: String,
+    #[serde(serialize_with = "crate::client::ordered_map")]
     pub sensors: HashMap<String, String>,
 }
 

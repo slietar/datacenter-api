@@ -34,7 +34,9 @@ pub struct User {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct State {
+    #[serde(serialize_with = "crate::client::ordered_map")]
     nodes: HashMap<String, Node>,
+    #[serde(serialize_with = "crate::client::ordered_map")]
     users: HashMap<String, User>,
 }
 
