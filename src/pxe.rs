@@ -37,12 +37,12 @@ pub struct CachixPin {
 fn parse_store_path(path: impl AsRef<Utf8Path>) -> anyhow::Result<(String, Utf8PathBuf)> {
     let path = path.as_ref();
     let Ok(path) = path.strip_prefix(std::path::Path::new("/nix/store")) else {
-        return Err(anyhow!("{} is not a store path", path).into());
+        return Err(anyhow!("{} is not a store path", path));
     };
 
     let mut components = path.components();
     let Some(Utf8Component::Normal(hashname)) = components.next() else {
-        return Err(anyhow!("bad path").into());
+        return Err(anyhow!("bad path"));
     };
 
     let re = Regex::new(r"^(?<hash>[0-9a-z]{32})-[-.+_?=0-9a-zA-Z]+$").expect("regex to be valid");
@@ -87,7 +87,7 @@ async fn download_path(state: &PxeState, hash: &str) -> anyhow::Result<PathBuf> 
             Ok(p)
         }
         None => {
-            let nar = binary_cache::download(&state.client, &state.caches, &hash).await?;
+            let nar = binary_cache::download(&state.client, &state.caches, hash).await?;
             Ok(state.store.add(hash, nar).await?)
         }
     }
@@ -112,7 +112,7 @@ async fn download_file(
             let target = Utf8Path::from_path(&target).unwrap();
 
             // TODO: support targets other than absolute /nix/store
-            (hash, path) = parse_store_path(&target)?;
+            (hash, path) = parse_store_path(target)?;
             println!("Following symbolic link to {hash}/{path}");
         } else {
             return Ok(tokio::fs::read(p).await?);
@@ -156,7 +156,7 @@ async fn handler_boot_request(
 ) -> Result<ErasedJson, PxeError> {
     let url = Url::parse("https://app.cachix.org/api/v1/cache/")
         .unwrap()
-        .join(&format!("{}/", &state.config.pxe.cachix))
+        .join(&format!("{}/", state.config.pxe.cachix))
         .unwrap();
 
     let Some((hostname, _host)) = state.config.find_host_by_mac(&mac) else {
@@ -199,9 +199,9 @@ pub struct ErrorDetail {
 }
 
 fn error(message: impl Into<String>) -> impl IntoResponse {
-    return Json(ErrorDetail {
+    Json(ErrorDetail {
         error: message.into(),
-    });
+    })
 }
 
 impl IntoResponse for PxeError {

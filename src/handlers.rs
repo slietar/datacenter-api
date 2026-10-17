@@ -1,19 +1,13 @@
 use crate::client::{ClientResult, HostClientState};
 use crate::comin;
-use crate::config::Config;
-use crate::ipmi::client::IpmiState;
-use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::FutureExt;
-use futures::TryFutureExt;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
-use ipmi_rs::sensor_event::GetSensorReading;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Error {

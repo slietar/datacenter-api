@@ -67,7 +67,7 @@ impl BinaryCache {
             .await?;
         r.error_for_status_ref()?;
 
-        Ok(NarInfo::parse(&r.text().await?)?)
+        NarInfo::parse(&r.text().await?)
     }
 
     pub async fn fetch_nar(

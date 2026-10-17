@@ -1,8 +1,5 @@
-use crate::client::{ClientResult, HostClientState};
-use crate::comin;
-use crate::config::Config;
 use crate::ipmi::client::IpmiState;
-use crate::ipmi::interface::{ChassisControl, GetChassisStatus, PowerRestorePolicy, ipmi_do};
+use crate::ipmi::interface::{GetChassisStatus, PowerRestorePolicy};
 
 use ipmi_rs::Ipmi;
 use ipmi_rs::rmcp::Rmcp;
@@ -53,19 +50,27 @@ impl IpmiManager {
     }
 }
 
-fn open(address: &str, username: &str, password: &[u8]) -> anyhow::Result<Ipmi<Rmcp>> {
-    let ipv6 = match address.parse::<IpAddr>()? {
+/// Opens a session with the BMC on a blocking thread.
+async fn open(address: &str, username: &str, password: &[u8]) -> anyhow::Result<Ipmi<Rmcp>> {
+    let ip = address.parse::<IpAddr>()?;
+    let username = username.to_owned();
+    let password = password.to_owned();
+
+    let ipv6 = match ip {
         IpAddr::V4(v4) => v4.to_ipv6_mapped(),
         IpAddr::V6(v6) => v6,
     };
 
-    let mut rmcp = Rmcp::new((ipv6, 623), Duration::from_secs(1))
-        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+    tokio::task::spawn_blocking(move || {
+        let mut rmcp = Rmcp::new((ipv6, 623), Duration::from_secs(1))
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
-    rmcp.activate(true, Some(username), Some(password))
-        .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+        rmcp.activate(true, Some(&username), Some(&password))
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
-    Ok(Ipmi::new(rmcp))
+        Ok(Ipmi::new(rmcp))
+    })
+    .await?
 }
 
 pub fn read_host_state(ipmi: &mut Ipmi<Rmcp>) -> anyhow::Result<IpmiState> {
@@ -128,16 +133,7 @@ impl StateSource for IpmiSource {
     async fn connect(
         &self,
     ) -> anyhow::Result<(IpmiState, BoxStream<'_, anyhow::Result<IpmiState>>)> {
-        // A blocking task can't borrow `self`, so give it its own copy of the
-        // (small) connection parameters.
-        let (address, username, password) = (
-            self.address.clone(),
-            self.username.clone(),
-            self.password.clone(),
-        );
-
-        let ipmi = tokio::task::spawn_blocking(move || open(&address, &username, &password))
-            .await??;
+        let ipmi = open(&self.address, &self.username, &self.password).await?;
 
         let (state, ipmi) = read(ipmi).await?;
 

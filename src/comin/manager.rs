@@ -81,7 +81,7 @@ impl StateSource for CominSource {
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap();
 
-                            if x.as_secs() % 2 == 0 {
+                            if x.as_secs().is_multiple_of(2) {
                                 return Some(Err(anyhow::anyhow!(
                                     "simulated error due to even timestamp"
                                 )));

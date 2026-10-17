@@ -1,16 +1,10 @@
 // https://www.intel.com/content/dam/www/public/us/en/documents/product-briefs/ipmi-second-gen-interface-spec-v2-rev1-1.pdf
 // https://dl.dell.com/manuals/all-products/esuprt_ser_stor_net/esuprt_cloud_products/poweredge-c6100_reference%20guide_en-us.pdf
 
-use futures::TryFutureExt;
-use ipmi_rs::Ipmi;
 use ipmi_rs::connection::IpmiCommand;
 use ipmi_rs::connection::Message;
 use ipmi_rs::connection::NetFn;
 use ipmi_rs::connection::NotEnoughData;
-use ipmi_rs::rmcp::Rmcp;
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::time::Duration;
 
 #[derive(Copy, Clone, Debug)]
 #[allow(dead_code)]
@@ -66,8 +60,8 @@ impl ChassisStatus {
 
 pub struct GetChassisStatus;
 
-impl Into<Message> for GetChassisStatus {
-    fn into(self) -> Message {
+impl From<GetChassisStatus> for Message {
+    fn from(val: GetChassisStatus) -> Self {
         Message::new_request(NetFn::Chassis, 0x01, Vec::new())
     }
 }
@@ -90,9 +84,9 @@ pub enum ChassisControl {
     HardReset = 3,
 }
 
-impl Into<Message> for ChassisControl {
-    fn into(self) -> Message {
-        Message::new_request(NetFn::Chassis, 0x02, vec![self as u8])
+impl From<ChassisControl> for Message {
+    fn from(val: ChassisControl) -> Self {
+        Message::new_request(NetFn::Chassis, 0x02, vec![val as u8])
     }
 }
 
@@ -103,33 +97,4 @@ impl IpmiCommand for ChassisControl {
     fn parse_success_response(_data: &[u8]) -> Result<Self::Output, Self::Error> {
         Ok(())
     }
-}
-
-#[tracing::instrument(skip(username, password, f))]
-pub fn ipmi_do<F, T, E>(
-    hostname: &str,
-    username: &str,
-    password: &[u8],
-    f: F,
-) -> impl Future<Output = anyhow::Result<T>> + use<F, T, E>
-where
-    F: FnOnce(&mut Ipmi<Rmcp>) -> Result<T, E> + Send + 'static,
-    T: Send + 'static,
-    E: Into<anyhow::Error> + Send + Sync,
-{
-    let hostname = hostname.to_owned();
-    let username = username.to_owned();
-    let password = password.to_owned();
-    let span = tracing::Span::current();
-    tokio::task::spawn_blocking(move || {
-        let _enter = span.enter();
-        let mut rmcp = Rmcp::new((hostname.as_ref(), 623), Duration::from_secs(1)).unwrap();
-        rmcp.activate(true, Some(&username), Some(&password))
-            .map_err(|e| anyhow::anyhow!("{:?}", e))?;
-
-        let mut ipmi = Ipmi::new(rmcp);
-        let result = f(&mut ipmi).map_err(Into::into)?;
-        Ok(result)
-    })
-    .unwrap_or_else(|e: tokio::task::JoinError| panic!("ipmi command panicked: {:?}", e))
 }

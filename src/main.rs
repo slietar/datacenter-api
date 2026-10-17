@@ -19,7 +19,7 @@ mod protobuf {
 }
 
 use axum::Router;
-use axum::routing::{get, put};
+use axum::routing::get;
 use axum_extra::middleware::option_layer;
 use clap::Parser;
 use std::collections::HashMap;
