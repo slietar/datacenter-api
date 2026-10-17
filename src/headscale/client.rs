@@ -60,14 +60,7 @@ impl NodeState {
                 })
         };
 
-        match reading {
-            Fallible::Ok(nodes) => ClientResult::Ok(find(nodes)),
-            Fallible::Partial { value, .. } => ClientResult::Partial {
-                error: ClientError::unknown(),
-                value: find(value),
-            },
-            Fallible::Err(_) => ClientResult::Err(ClientError::unknown()),
-        }
+        ClientResult::from_reading(reading, |nodes| find(nodes))
     }
 }
 

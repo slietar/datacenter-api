@@ -1,5 +1,4 @@
-use crate::client::{ClientError, ClientResult};
-use crate::live_state::Fallible;
+use crate::client::ClientResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -13,13 +12,6 @@ pub struct IpmiState {
 
 impl std::convert::From<super::manager::IpmiReading> for ClientResult<IpmiState> {
     fn from(reading: super::manager::IpmiReading) -> Self {
-        match reading {
-            Fallible::Ok(state) => ClientResult::Ok(state.as_ref().clone()),
-            Fallible::Partial { value, .. } => ClientResult::Partial {
-                error: ClientError::unknown(),
-                value: value.as_ref().clone(),
-            },
-            Fallible::Err(_) => ClientResult::Err(ClientError::unknown()),
-        }
+        ClientResult::from_reading(&reading, IpmiState::clone)
     }
 }

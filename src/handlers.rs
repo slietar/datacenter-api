@@ -1,5 +1,4 @@
 use crate::client::{ClientResult, HostClientState};
-use crate::comin;
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -58,8 +57,23 @@ pub async fn host_get_handler(
 }
 
 enum HostStateUpdate {
-    Comin(comin::manager::CominReading),
+    Ipmi(crate::ipmi::manager::IpmiReading),
+    Comin(crate::comin::manager::CominReading),
     Headscale(crate::headscale::manager::HeadscaleReading),
+}
+
+/// Readings after the one held at subscription time.
+fn updates<T, E>(
+    subscription: Option<crate::live_state::Subscription<T, E>>,
+) -> BoxStream<'static, crate::live_state::Reading<T, E>>
+where
+    T: Send + Sync + 'static,
+    E: Send + Sync + 'static,
+{
+    match subscription {
+        Some(sub) => sub.into_stream().skip(1).boxed(),
+        None => stream::empty().boxed(),
+    }
 }
 
 pub async fn host_sse_handler(
@@ -72,65 +86,55 @@ pub async fn host_sse_handler(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let comin_manager = host_manager.comin_manager.clone();
+    let ipmi_manager = host_manager.ipmi_manager.clone();
     let address = host_manager.host_config.address.clone();
     let headscale_manager = state.headscale_manager.clone();
 
-    let has_comin = comin_manager.is_some();
-    let has_headscale = headscale_manager.is_some();
+    let (mut comin_sub, mut ipmi_sub, mut headscale_sub) = (None, None, None);
+    if let Some(manager) = comin_manager {
+        comin_sub = Some(manager.subscribe().await);
+    }
+    if let Some(manager) = ipmi_manager {
+        ipmi_sub = Some(manager.subscribe().await);
+    }
+    if let Some(manager) = headscale_manager {
+        headscale_sub = Some(manager.subscribe().await);
+    }
 
-    let comin_stream = match comin_manager {
-        Some(comin_manager) => comin_manager
-            .subscribe()
-            .await
-            .into_stream()
-            .map(HostStateUpdate::Comin)
-            .boxed(),
-        None => stream::empty().boxed(),
-    };
+    // Subscriptions already hold a reading, so collect them all into a single
+    // initial event and only stream the changes that follow.
+    let mut comin_state = comin_sub.as_mut().map(|sub| sub.get());
+    let mut ipmi_state = ipmi_sub.as_mut().map(|sub| sub.get());
+    let mut headscale_state = headscale_sub.as_mut().map(|sub| sub.get());
 
-    let headscale_stream = match headscale_manager {
-        Some(headscale_manager) => headscale_manager
-            .subscribe()
-            .await
-            .into_stream()
-            .map(HostStateUpdate::Headscale)
-            .boxed(),
-        None => stream::empty().boxed(),
-    };
-
-    let stream: BoxStream<'static, Result<Event, axum::Error>> = if has_comin || has_headscale {
-        stream::select(comin_stream, headscale_stream)
-            .scan(
-                (None, None),
-                move |(comin_state, headscale_state), update| {
-                    match update {
-                        HostStateUpdate::Comin(reading) => *comin_state = Some(reading),
-                        HostStateUpdate::Headscale(reading) => *headscale_state = Some(reading),
-                    }
-
-                    let comin = comin_state.clone().map(ClientResult::from);
-                    let headscale = headscale_state.as_ref().map(|reading| {
-                        crate::headscale::client::NodeState::from_reading(reading, &address)
-                    });
-
-                    futures::future::ready(Some(Event::default().json_data(&HostClientState {
-                        comin,
-                        ipmi: None,
-                        headscale,
-                    })))
-                },
-            )
-            .boxed()
-    } else {
-        stream::once(async {
-            Event::default().json_data(&HostClientState {
-                comin: None,
-                ipmi: None,
-                headscale: None,
-            })
+    let to_event = move |comin: &Option<_>, ipmi: &Option<_>, headscale: &Option<_>| {
+        Event::default().json_data(&HostClientState {
+            comin: comin.clone().map(ClientResult::from),
+            ipmi: ipmi.clone().map(ClientResult::from),
+            headscale: headscale.as_ref().map(|reading| {
+                crate::headscale::client::NodeState::from_reading(reading, &address)
+            }),
         })
-        .boxed()
     };
+
+    let initial = to_event(&comin_state, &ipmi_state, &headscale_state);
+
+    let comin_stream = updates(comin_sub).map(HostStateUpdate::Comin).boxed();
+    let ipmi_stream = updates(ipmi_sub).map(HostStateUpdate::Ipmi).boxed();
+    let headscale_stream = updates(headscale_sub).map(HostStateUpdate::Headscale).boxed();
+
+    let changes = stream::select_all([comin_stream, ipmi_stream, headscale_stream]).map(
+        move |update| {
+            match update {
+                HostStateUpdate::Comin(reading) => comin_state = Some(reading),
+                HostStateUpdate::Ipmi(reading) => ipmi_state = Some(reading),
+                HostStateUpdate::Headscale(reading) => headscale_state = Some(reading),
+            }
+            to_event(&comin_state, &ipmi_state, &headscale_state)
+        },
+    );
+
+    let stream = stream::once(async { initial }).chain(changes);
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }

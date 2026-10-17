@@ -1,3 +1,4 @@
+use crate::live_state::{Fallible, Reading};
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 use std::borrow::Cow;
@@ -25,6 +26,22 @@ pub enum ClientResult<T> {
     Ok(T),
     Err(ClientError),
     Partial { error: ClientError, value: T },
+}
+
+impl<T> ClientResult<T> {
+    /// Converts a [`Reading`] into a `ClientResult`, mapping the value with
+    /// `f`. Error details are replaced by [`ClientError::unknown`] so they
+    /// don't leak to the client.
+    pub fn from_reading<V, E>(reading: &Reading<V, E>, f: impl FnOnce(&V) -> T) -> Self {
+        match reading {
+            Fallible::Ok(value) => ClientResult::Ok(f(value)),
+            Fallible::Partial { value, .. } => ClientResult::Partial {
+                error: ClientError::unknown(),
+                value: f(value),
+            },
+            Fallible::Err(_) => ClientResult::Err(ClientError::unknown()),
+        }
+    }
 }
 
 impl<T: Serialize> Serialize for ClientResult<T> {

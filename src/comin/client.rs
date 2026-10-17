@@ -1,5 +1,4 @@
-use crate::client::{ClientError, ClientResult};
-use crate::live_state::Fallible;
+use crate::client::ClientResult;
 use crate::protobuf;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -60,14 +59,7 @@ pub struct State {
 
 impl std::convert::From<super::manager::CominReading> for ClientResult<State> {
     fn from(reading: super::manager::CominReading) -> Self {
-        match reading {
-            Fallible::Ok(state) => ClientResult::Ok(State::from(state.as_ref())),
-            Fallible::Partial { value, .. } => ClientResult::Partial {
-                error: ClientError::unknown(),
-                value: State::from(value.as_ref()),
-            },
-            Fallible::Err(_) => ClientResult::Err(ClientError::unknown()),
-        }
+        ClientResult::from_reading(&reading, |state| State::from(state))
     }
 }
 
