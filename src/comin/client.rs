@@ -11,46 +11,55 @@ use std::collections::HashMap;
 //     pub generation_uuid: String,
 // }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Deployer {
     pub booted_deployment_uuid: Option<String>,
     pub deploying: bool,
     #[serde(serialize_with = "crate::client::ordered_map")]
+    #[ts(as = "std::collections::HashMap<String, Deployment>")]
     pub deployments: HashMap<String, Deployment>,
     pub switched_deployment_uuid: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Fetcher {
     pub fetching: bool,
     pub status: Option<FetcherStatus>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct FetcherStatus {
     branch_error_message: Option<String>,
     branch_name: String,
     commit_message: String,
     commit_sha: String,
     error_message: Option<String>,
+    #[ts(type = "number | null")]
     remote_fetch_time: Option<u64>,
     remote_name: String,
     remote_url: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Deployment {
+    #[ts(type = "number | null")]
     pub end_time: Option<u64>,
+    #[ts(type = "number | null")]
     pub start_time: Option<u64>,
     pub uuid: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct State {
     // builder: Builder,
     deployer: Deployer,

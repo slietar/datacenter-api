@@ -1,4 +1,4 @@
-result
-target
-datacenter-api
-config.toml
+/config.toml
+/result
+/target
+/web/src/bindings

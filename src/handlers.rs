@@ -245,7 +245,8 @@ pub async fn hosts_events_handler(
 //     }
 // }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct Whoami {
     name: String,
     email: String,

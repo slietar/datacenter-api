@@ -6,13 +6,16 @@ use crate::client::{ClientError, ClientResult};
 use crate::headscale::manager::HeadscaleReading;
 use crate::live_state::Fallible;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct Node {
+    #[ts(type = "number | null")]
     expiration_time: Option<u64>,
     given_name: String,
     id: String,
     ip_addresses: Vec<String>,
+    #[ts(type = "number")]
     last_visibility_time: u64,
     machine_key: String,
     name: String,
@@ -22,8 +25,9 @@ pub struct Node {
     user_id: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct User {
     display_name: String,
     email: String,
@@ -40,8 +44,9 @@ pub struct State {
     users: HashMap<String, User>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export)]
 pub struct NodeState {
     pub node: Node,
     pub user: User,

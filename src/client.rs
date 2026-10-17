@@ -4,9 +4,12 @@ use serde::ser::{SerializeStruct, Serializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ClientError {
+    #[ts(as = "String")]
     message: Cow<'static, str>,
+    #[ts(as = "String")]
     reason: Cow<'static, str>,
 }
 
@@ -21,11 +24,16 @@ impl ClientError {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Serialized by hand below; the variants mirror the resulting JSON shape.
+#[derive(Debug, Clone, ts_rs::TS)]
+#[ts(export, untagged)]
 pub enum ClientResult<T> {
-    Ok(T),
-    Err(ClientError),
-    Partial { error: ClientError, value: T },
+    Ok(#[ts(type = "{ ok: true, value: T }")] T),
+    Err(#[ts(type = "{ ok: false, error: ClientError }")] ClientError),
+    Partial {
+        error: ClientError,
+        value: T,
+    },
 }
 
 impl<T> ClientResult<T> {
@@ -84,7 +92,8 @@ impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct HostClientState {
     pub comin: Option<ClientResult<crate::comin::client::State>>,
     pub headscale: Option<ClientResult<Option<crate::headscale::client::NodeState>>>,
