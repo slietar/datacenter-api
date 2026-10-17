@@ -3,8 +3,6 @@ use serde::ser::{SerializeStruct, Serializer};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::handlers::IpmiState;
-
 #[derive(Debug, Clone, Serialize)]
 pub struct ClientError {
     message: Cow<'static, str>,
@@ -73,7 +71,7 @@ impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
 pub struct HostClientState {
     pub comin: Option<ClientResult<crate::comin::client::State>>,
     pub headscale: Option<ClientResult<Option<crate::headscale::client::NodeState>>>,
-    pub ipmi: Option<IpmiState>,
+    pub ipmi: Option<ClientResult<crate::ipmi::client::IpmiState>>,
 }
 
 /// For use with serde's [serialize_with] attribute
