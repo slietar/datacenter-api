@@ -63,8 +63,8 @@ impl IpmiManager {
             IpAddr::V6(v6) => v6,
         };
 
-        let mut rmcp = Rmcp::new((ipv6, 623), Duration::from_secs(1))
-            .map_err(|e| format!("{:?}", e))?;
+        let mut rmcp =
+            Rmcp::new((ipv6, 623), Duration::from_secs(1)).map_err(|e| format!("{:?}", e))?;
 
         rmcp.activate(true, Some(&self.username), Some(&self.password))
             .map_err(|e| format!("{:?}", e))?;

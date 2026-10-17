@@ -10,7 +10,6 @@ mod ipmi;
 mod live_state;
 mod manager;
 mod nar;
-mod polling_state;
 mod pxe;
 mod state;
 mod store;
@@ -55,9 +54,10 @@ struct Cli {
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::from_default_env()
-                .add_directive("h2=info".parse().unwrap())
-                .add_directive("tower=info".parse().unwrap())
+            EnvFilter::builder()
+                .with_default_directive(Level::INFO.into())
+                .from_env_lossy()
+                .add_directive("datacenter_api=debug".parse().unwrap())
                 .add_directive("tower_http=warn".parse().unwrap()),
         )
         .compact()
