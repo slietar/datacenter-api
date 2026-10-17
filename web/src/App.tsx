@@ -1,17 +1,41 @@
 import { Component, type ReactNode } from 'react';
 
+export type PossiblyPromise<T> = Promise<T> | T;
+export type Handler = (
+  params: Record<string, string>,
+  state: unknown,
+  options: { signal: AbortSignal; },
+) => PossiblyPromise<HandleResult>;
+
+export interface HandleResult {
+  contents: ReactNode;
+  title: string;
+}
+
+export function createRoute(pathname: string, handler: Handler) {
+  return {
+    pattern: new URLPattern({ baseURL: location.href, pathname }),
+    handler,
+  };
+}
+
 export interface AppProps { }
 
 export interface AppState {
-  loading: boolean;
+  loading: {
+    // // Only used for initial asynchronous navigations
+    // controller: AbortController | null;
+
+    signal: AbortSignal;
+  } | null;
   page: ReactNode;
 }
 
 export default class App extends Component<AppProps, AppState> {
   controller: AbortController | null = null;
   routes: {
+    handler: Handler;
     pattern: URLPattern;
-    render: (params: Record<string, string>, state: unknown) => ReactNode | Promise<ReactNode>;
   }[];
 
   constructor(props: AppProps) {
@@ -20,56 +44,74 @@ export default class App extends Component<AppProps, AppState> {
     this.routes = [
       {
         pattern: new URLPattern({ baseURL: location.href, pathname: '/' }),
-        render: (params: Record<string, string>, state: unknown) => {
-          return (
+        handler: () => ({
+          contents: (
             <div>
               <h1>Home</h1>
               <a href="/slow">Go to Slow Page</a>
             </div>
-          );
-        },
+          ),
+          title: 'Home',
+        }),
       },
       {
         pattern: new URLPattern({ baseURL: location.href, pathname: '/slow' }),
-        render: async (params: Record<string, string>, state: unknown) => {
-          await new Promise<void>(resolve => void setTimeout(() => void resolve(), 1000));
+        handler: async (_params, _state, options) => {
+          options.signal.addEventListener('abort', () => {
+            console.log('Navigation aborted');
+          });
 
-          return (
-            <div>
-              <h1>Slow Page</h1>
-              <a href="/">Go to Home</a>
-            </div>
-          );
+          await new Promise<void>((resolve, reject) => {
+            let timeout = setTimeout(() => void resolve(), 1000);
+
+            options.signal.addEventListener('abort', () => {
+              clearTimeout(timeout);
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          });
+
+          return {
+            contents: (
+              <div>
+                <h1>Slow Page</h1>
+                <a href="/">Go to Home</a>
+              </div>
+            ),
+            title: 'Slow Page',
+          };
         },
       }
     ];
 
     this.state = {
-      loading: true,
+      loading: null,
       page: null,
     };
   }
 
-  renderRoute(url: URL, navigationEntryState: unknown): ReactNode | Promise<ReactNode> {
+  handleRoute(url: URL, navigationEntryState: unknown): PossiblyPromise<HandleResult> {
     for (let route of this.routes) {
       let patternMatch = route.pattern.exec(url);
 
       if (patternMatch) {
         let params = patternMatch.pathname.groups as Record<string, string>;
-        return route.render(params, navigationEntryState);
+        return route.handler(params, navigationEntryState, { signal: new AbortController().signal });
       }
     }
 
-    return (
-      <div>
-        <h1>Page Not Found</h1>
-      </div>
-    );
+    return {
+      contents: (
+        <div>
+          <h1>Page Not Found</h1>
+        </div>
+      ),
+      title: 'Page not found',
+    };
   }
 
   override render() {
     return (
-      <div style={{ display: 'contents' }} inert={this.state.loading}>
+      <div style={{ display: 'contents' }} inert={this.state.loading !== null}>
         {this.state.page}
       </div>
     );
@@ -80,10 +122,11 @@ export default class App extends Component<AppProps, AppState> {
     let signal = this.controller.signal;
 
     // Initial route
-    Promise.resolve(this.renderRoute(new URL(window.location.href), window.navigation.currentEntry?.getState()))
-      .then((page) => {
+    Promise.resolve(this.handleRoute(new URL(window.location.href), window.navigation.currentEntry?.getState()))
+      .then((result) => {
         if (!signal.aborted) {
-          this.setState({ loading: false, page });
+          document.title = result.title;
+          this.setState({ loading: null, page: result.contents });
         }
       });
 
@@ -100,32 +143,15 @@ export default class App extends Component<AppProps, AppState> {
         return;
       }
 
-      interface NavigationState { }
-
       let url = new URL(event.destination.url);
-      let isFreshEntry = ((event.navigationType === 'push') || (event.navigationType === 'replace')) && !event.hashChange;
-      let currentEntryIndex = window.navigation.currentEntry?.index;
-      let currentState = window.navigation.currentEntry?.getState() as NavigationState | undefined;
-      let newState = event.destination.getState() as NavigationState | undefined;
-      let isSameURL = url.href === window.location.href;
-
-      let info = event.info as {
-        trigger: 'navBar';
-      } | undefined;
-
-
-      if ((info?.trigger === 'navBar') && ('vibrate' in navigator)) {
-        navigator.vibrate(16);
-      }
-
 
       event.intercept({
         scroll: 'manual',
         handler: async () => {
           // Keep the previous page rendered (but inert) while the next one loads.
-          this.setState({ loading: true });
+          this.setState({ loading: { signal: event.signal } });
 
-          let page = await this.renderRoute(url, event.destination.getState());
+          let result = await this.handleRoute(url, event.destination.getState());
 
           // Skip if this navigation was superseded or the component unmounted.
           if (event.signal.aborted || signal.aborted) {
@@ -133,18 +159,19 @@ export default class App extends Component<AppProps, AppState> {
           }
 
           await new Promise<void>((resolve) => {
-            this.setState({ loading: false, page }, () => void resolve());
+            document.title = result.title;
+            this.setState({ loading: null, page: result.contents }, () => void resolve());
           });
         },
       });
 
       event.signal.addEventListener('abort', () => {
-        this.setState({ loading: false });
+        this.setState({ loading: null });
       }, { signal });
     }, { signal });
 
 
-    document.addEventListener('scroll', (event) => {
+    document.addEventListener('scroll', () => {
       let scrollTop = document.documentElement.scrollTop;
       localStorage.setItem('scrollTop', scrollTop.toString());
     }, { signal });
@@ -158,7 +185,7 @@ export default class App extends Component<AppProps, AppState> {
     this.componentDidRender(null, null);
   }
 
-  override componentDidUpdate(prevProps: Readonly<AppProps>, prevState: Readonly<AppState>, snapshot?: any): void {
+  override componentDidUpdate(prevProps: Readonly<AppProps>, prevState: Readonly<AppState>): void {
     this.componentDidRender(prevProps, prevState);
   }
 
@@ -167,7 +194,7 @@ export default class App extends Component<AppProps, AppState> {
     this.controller = null;
   }
 
-  componentDidRender(prevProps: Readonly<AppProps> | null, prevState: Readonly<AppState> | null) {
+  componentDidRender(_prevProps: Readonly<AppProps> | null, _prevState: Readonly<AppState> | null) {
     // Custom logic to run after render
   }
 }
