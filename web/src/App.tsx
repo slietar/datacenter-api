@@ -1,159 +1,173 @@
-import PowerIcon from '@mui/icons-material/Power';
-import PowerOffIcon from '@mui/icons-material/PowerOff';
-import StorageIcon from '@mui/icons-material/Storage';
-import { OpsaLogo } from '@opsa-dev/ui-shared';
-import { Application, NavBar } from '@opsa-dev/ui-tscl';
-import * as React from 'react';
-import { Fragment } from 'react';
-import useSWR from 'swr';
-import './App.css';
+import { Component, type ReactNode } from 'react';
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
+export interface AppProps { }
 
-
-const API_URL = import.meta.env.VITE_API_URL || "";
-
-async function gravatarUrl(email: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(email.toLowerCase())
-  );
-  const hash = Array.from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-  return `https://www.gravatar.com/avatar/${hash}?d=mp`;
+export interface AppState {
+  loading: boolean;
+  page: ReactNode;
 }
 
-async function setPowerState(hostname: string, state: boolean) {
-  await fetch(`${API_URL}/host/${hostname}/command`, {
-    method: "PUT",
-    body: JSON.stringify({ power: state }),
-    headers: {
-      'Content-Type': 'application/json'
-    },
-  });
-}
+export default class App extends Component<AppProps, AppState> {
+  controller: AbortController | null = null;
+  routes: {
+    pattern: URLPattern;
+    render: (params: Record<string, string>, state: unknown) => ReactNode | Promise<ReactNode>;
+  }[];
 
-interface Data {
-  hosts: Record<string, {
-    error: true;
-  } | {
-    error?: false;
-    power_is_on: boolean;
-    power_restore_policy: 'always-on' | 'always-off' | 'previous';
-    sensors: Record<string, string>;
-  }>;
-}
+  constructor(props: AppProps) {
+    super(props);
 
-export default function App() {
-  let applicationRef = React.useRef<Application>(null);
+    this.routes = [
+      {
+        pattern: new URLPattern({ baseURL: location.href, pathname: '/' }),
+        render: (params: Record<string, string>, state: unknown) => {
+          return (
+            <div>
+              <h1>Home</h1>
+              <a href="/slow">Go to Slow Page</a>
+            </div>
+          );
+        },
+      },
+      {
+        pattern: new URLPattern({ baseURL: location.href, pathname: '/slow' }),
+        render: async (params: Record<string, string>, state: unknown) => {
+          await new Promise<void>(resolve => void setTimeout(() => void resolve(), 1000));
 
-  const { data }: { data: Data; } = useSWR(`${API_URL}/hosts`, fetcher, { refreshInterval: 5000 });
-  const { data: whoami }: { data?: { name: string; email: string; }; } = useSWR(`${API_URL}/whoami`, fetcher);
-  const { data: avatarUrl } = useSWR(
-    whoami ? ['gravatar', whoami.email] : null,
-    ([, email]) => gravatarUrl(email)
-  );
-
-  return (
-    <Application
-      ref={applicationRef}
-      brand={<OpsaLogo title="Datacenter" />}
-      account={
-        whoami && (
-          <a href="https://home.lietar.net" className="account">
-            <img src={avatarUrl} />
-            <div className="text">{whoami.name}</div>
-          </a>
-        )
+          return (
+            <div>
+              <h1>Slow Page</h1>
+              <a href="/">Go to Home</a>
+            </div>
+          );
+        },
       }
-      navigation={
-        <NavBar
-          leftEntries={[
-            {
-              id: 'servers',
-              active: true,
-              label: 'Servers',
-              icon: StorageIcon,
-              target: '/',
-            },
-          ]} />
-      }>
-      <div className="Body">
-        <h1>Servers</h1>
+    ];
 
-        {data &&
-          Object.entries(data.hosts)
-            .toSorted(([k1, _v1], [k2, _v2]) => k1.localeCompare(k2))
-            .map(([hostName, hostInfo]) => (
-              <Fragment key={hostName}>
-                <div className="Heading">
-                  <h2>{hostName}</h2>
-                  <div className="Actions">
-                    {hostInfo.error
-                      ? (
-                        <button type="button" className="Button" disabled>
-                          <PowerIcon />
-                          <div className="text">Turn on</div>
-                        </button>
-                      )
-                      : (
-                        <button
-                          type="button"
-                          className="Button"
-                          data-variant={hostInfo.power_is_on ? "danger" : "default"}
-                          onClick={() => {
-                            if (!hostInfo.error) {
-                              applicationRef.current!.pushToast({
-                                title: "Power state change on " + hostName,
-                                description: `Turning ${hostName} ${hostInfo.power_is_on ? "off" : "on"}. This may take a few seconds.`,
-                              });
+    this.state = {
+      loading: true,
+      page: null,
+    };
+  }
 
-                              setPowerState(hostName, !hostInfo.power_is_on);
-                            }
-                          }}>
-                          {hostInfo.power_is_on ? <PowerOffIcon /> : <PowerIcon />}
-                          <div className="text">{hostInfo.power_is_on ? "Turn off" : "Turn on"}</div>
-                        </button>
-                      )}
-                  </div>
-                </div>
-                {hostInfo.error
-                  ? (
-                    <div className="EmptyState">
-                      <p>This host is unavailable.</p>
-                    </div>
-                  )
-                  : (
-                    <div className="DataList">
-                      <dl>
-                        <dt>Power State</dt>
-                        <dd>{hostInfo.power_is_on ? "On" : "Off"}</dd>
-                        <dt>Power Restore Policy</dt>
-                        <dd>{{
-                          "always-on": "Always on",
-                          "always-off": "Always off",
-                          "previous": "Previous state"
-                        }[hostInfo.power_restore_policy]
-                        }</dd>
-                      </dl>
+  renderRoute(url: URL, navigationEntryState: unknown): ReactNode | Promise<ReactNode> {
+    for (let route of this.routes) {
+      let patternMatch = route.pattern.exec(url);
 
-                      <h3>Sensors</h3>
-                      <dl>
-                        {Object.entries(hostInfo.sensors)
-                          .toSorted(([k1, _v1], [k2, _v2]) => k1.localeCompare(k2))
-                          .map(([sensorName, sensorValue]) => (
-                            <Fragment key={sensorName}>
-                              <dt>{sensorName}</dt>
-                              <dd>{sensorValue}</dd>
-                            </Fragment>
-                          ))}
-                      </dl>
-                    </div>
-                  )}
-              </Fragment>
-            ))}
+      if (patternMatch) {
+        let params = patternMatch.pathname.groups as Record<string, string>;
+        return route.render(params, navigationEntryState);
+      }
+    }
+
+    return (
+      <div>
+        <h1>Page Not Found</h1>
       </div>
-    </Application>
-  );
+    );
+  }
+
+  override render() {
+    return (
+      <div style={{ display: 'contents' }} inert={this.state.loading}>
+        {this.state.page}
+      </div>
+    );
+  }
+
+  override componentDidMount() {
+    this.controller = new AbortController();
+    let signal = this.controller.signal;
+
+    // Initial route
+    Promise.resolve(this.renderRoute(new URL(window.location.href), window.navigation.currentEntry?.getState()))
+      .then((page) => {
+        if (!signal.aborted) {
+          this.setState({ loading: false, page });
+        }
+      });
+
+    window.navigation.addEventListener('navigate', (event) => {
+      if (!event.canIntercept) {
+        return;
+      }
+
+      if (event.downloadRequest || event.formData) {
+        return;
+      }
+
+      if (event.navigationType === 'reload') {
+        return;
+      }
+
+      interface NavigationState { }
+
+      let url = new URL(event.destination.url);
+      let isFreshEntry = ((event.navigationType === 'push') || (event.navigationType === 'replace')) && !event.hashChange;
+      let currentEntryIndex = window.navigation.currentEntry?.index;
+      let currentState = window.navigation.currentEntry?.getState() as NavigationState | undefined;
+      let newState = event.destination.getState() as NavigationState | undefined;
+      let isSameURL = url.href === window.location.href;
+
+      let info = event.info as {
+        trigger: 'navBar';
+      } | undefined;
+
+
+      if ((info?.trigger === 'navBar') && ('vibrate' in navigator)) {
+        navigator.vibrate(16);
+      }
+
+
+      event.intercept({
+        scroll: 'manual',
+        handler: async () => {
+          // Keep the previous page rendered (but inert) while the next one loads.
+          this.setState({ loading: true });
+
+          let page = await this.renderRoute(url, event.destination.getState());
+
+          // Skip if this navigation was superseded or the component unmounted.
+          if (event.signal.aborted || signal.aborted) {
+            return;
+          }
+
+          await new Promise<void>((resolve) => {
+            this.setState({ loading: false, page }, () => void resolve());
+          });
+        },
+      });
+
+      event.signal.addEventListener('abort', () => {
+        this.setState({ loading: false });
+      }, { signal });
+    }, { signal });
+
+
+    document.addEventListener('scroll', (event) => {
+      let scrollTop = document.documentElement.scrollTop;
+      localStorage.setItem('scrollTop', scrollTop.toString());
+    }, { signal });
+
+    let savedScrollTop = parseInt(localStorage.getItem('scrollTop') ?? '0', 10);
+
+    if (savedScrollTop) {
+      document.documentElement.scrollTo({ top: savedScrollTop });
+    }
+
+    this.componentDidRender(null, null);
+  }
+
+  override componentDidUpdate(prevProps: Readonly<AppProps>, prevState: Readonly<AppState>, snapshot?: any): void {
+    this.componentDidRender(prevProps, prevState);
+  }
+
+  override componentWillUnmount() {
+    this.controller!.abort();
+    this.controller = null;
+  }
+
+  componentDidRender(prevProps: Readonly<AppProps> | null, prevState: Readonly<AppState> | null) {
+    // Custom logic to run after render
+  }
 }
