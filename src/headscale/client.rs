@@ -30,7 +30,7 @@ pub struct Node {
 #[ts(export)]
 pub struct User {
     display_name: String,
-    email: String,
+    email: Option<String>,
     id: String,
     name: String,
 }
@@ -74,10 +74,13 @@ impl NodeState {
 impl std::convert::From<&crate::headscale::node::Node> for Node {
     fn from(node: &crate::headscale::node::Node) -> Self {
         Node {
-            expiration_time: node.expiry.as_ref().map(|expiry| {
-                chrono::DateTime::parse_from_rfc3339(expiry)
-                    .unwrap()
-                    .timestamp() as u64
+            // Headscale reports "no expiry" as the zero time (0001-01-01T00:00:00Z),
+            // which is before the Unix epoch and so doesn't fit in a u64.
+            expiration_time: node.expiry.as_deref().and_then(|expiry| {
+                let timestamp = chrono::DateTime::parse_from_rfc3339(expiry)
+                    .ok()?
+                    .timestamp();
+                u64::try_from(timestamp).ok()
             }),
             given_name: node.given_name.clone(),
             id: node.id.clone(),
@@ -105,7 +108,7 @@ impl std::convert::From<&crate::headscale::node::User> for User {
     fn from(user: &crate::headscale::node::User) -> Self {
         User {
             display_name: user.display_name.clone(),
-            email: user.email.clone(),
+            email: (!user.email.is_empty()).then(|| user.email.clone()),
             id: user.id.clone(),
             name: user.name.clone(),
         }

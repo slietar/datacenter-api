@@ -1,11 +1,12 @@
-import { Component, type ReactNode } from 'react';
-import { StyledEngineProvider } from '@mui/material/styles';
 import ErrorIcon from '@mui/icons-material/Error';
+import { StyledEngineProvider } from '@mui/material/styles';
+import { Component, type ReactNode } from 'react';
 
 import { handleHomePage } from './pages/home.js';
 
 import './App.css';
 import { Layout } from './layout.js';
+import { handleHostPage } from './pages/host.js';
 
 export type PossiblyPromise<T> = Promise<T> | T;
 export type Handler = (
@@ -56,28 +57,32 @@ export default class App extends Component<AppProps, AppState> {
         handler: handleHomePage,
       },
       {
-        pattern: new URLPattern({ baseURL: location.href, pathname: '/slow' }),
-        handler: async (_params, _state, options) => {
-          await new Promise<void>((resolve, reject) => {
-            let timeout = setTimeout(() => void resolve(), 1000);
+        pattern: new URLPattern({ baseURL: location.href, pathname: '/host/:hostName' }),
+        handler: handleHostPage,
+      },
+      // {
+      //   pattern: new URLPattern({ baseURL: location.href, pathname: '/slow' }),
+      //   handler: async (_params, _state, options) => {
+      //     await new Promise<void>((resolve, reject) => {
+      //       let timeout = setTimeout(() => void resolve(), 1000);
 
-            options.signal.addEventListener('abort', () => {
-              clearTimeout(timeout);
-              reject(new DOMException('Aborted', 'AbortError'));
-            });
-          });
+      //       options.signal.addEventListener('abort', () => {
+      //         clearTimeout(timeout);
+      //         reject(new DOMException('Aborted', 'AbortError'));
+      //       });
+      //     });
 
-          return {
-            contents: (
-              <div>
-                <h1>Slow Page</h1>
-                <a href="/">Go to Home</a>
-              </div>
-            ),
-            title: 'Slow Page',
-          };
-        },
-      }
+      //     return {
+      //       contents: (
+      //         <div>
+      //           <h1>Slow Page</h1>
+      //           <a href="/">Go to Home</a>
+      //         </div>
+      //       ),
+      //       title: 'Slow Page',
+      //     };
+      //   },
+      // }
     ];
 
     let initialResult = this.handleRoute(

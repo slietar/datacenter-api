@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 
 import { ModernEventSource } from './sse.js';
 
-export type Stream<T> = () => T;
+export type Stream<T> = {
+  initialValue: T;
+  (): T;
+};
 
 export async function createStream<T>(url: URL | string) {
   let eventSource = new ModernEventSource<T>(url.toString());
@@ -11,7 +14,7 @@ export async function createStream<T>(url: URL | string) {
 
   let initialState = await eventSource.event();
 
-  return (() => {
+  let stream = (() => {
     let [state, setState] = useState<T | null>(initialState);
 
     useEffect(() => {
@@ -28,4 +31,8 @@ export async function createStream<T>(url: URL | string) {
 
     return state;
   }) as Stream<T>;
+
+  stream.initialValue = initialState;
+
+  return stream;
 }

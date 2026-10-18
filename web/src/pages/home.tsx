@@ -1,11 +1,10 @@
-import ErrorIcon from '@mui/icons-material/Error';
 import { Copiable } from '@opsa-dev/ui-tscl';
 
-import type { ClientResult } from '../bindings/ClientResult.js';
 import type { HostsClientState } from '../bindings/HostsClientState.js';
 import { formatRelativeInstant } from '../formatting.js';
 import { Layout } from '../layout.js';
 import { createStream, type Stream } from '../stream.js';
+import { mapResult } from '../utilities.js';
 
 
 export async function handleHomePage() {
@@ -19,21 +18,6 @@ export async function handleHomePage() {
     ),
     title: 'Home',
   };
-}
-
-function mapResult<T, S>(result: ClientResult<T>, mapper: (value: T) => S) {
-  if (result.ok) {
-    return mapper(result.value);
-  }
-
-  return (
-    <div className="InlineError">
-      <span className="icon">
-        <ErrorIcon />
-      </span>
-      Error loading data
-    </div>
-  )
 }
 
 export function HomePage(props: {
@@ -111,7 +95,7 @@ export function HomePage(props: {
                   )}
                 </td>
                 <td style={{ width: '1%' }}>
-                  <button type="button" className="Button">Manage</button>
+                  <a href={`/host/${host.name}`} className="Button">Manage</a>
                 </td>
               </tr>
             ))}

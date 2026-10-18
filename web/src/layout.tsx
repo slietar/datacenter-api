@@ -5,7 +5,7 @@ import { type PropsWithChildren } from 'react';
 
 
 export function Layout(props: PropsWithChildren<{
-  activeNavigationEntryId: 'servers' | null;
+  activeNavigationEntryId?: 'servers' | null;
 }>) {
   let whoami = null;
   let avatarUrl = null;
