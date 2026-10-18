@@ -31,6 +31,10 @@ pub enum ClientResult<T> {
     Ok(#[ts(type = "{ ok: true, value: T }")] T),
     Err(#[ts(type = "{ ok: false, error: ClientError }")] ClientError),
     Partial {
+        /// Always `false` on the wire; only present so the TS type carries
+        /// the discriminant (see the manual `Serialize` impl).
+        #[ts(type = "false")]
+        ok: (),
         error: ClientError,
         value: T,
     },
@@ -44,6 +48,7 @@ impl<T> ClientResult<T> {
         match reading {
             Fallible::Ok(value) => ClientResult::Ok(f(value)),
             Fallible::Partial { value, .. } => ClientResult::Partial {
+                ok: (),
                 error: ClientError::unknown(),
                 value: f(value),
             },
@@ -64,7 +69,7 @@ impl<T: Serialize> Serialize for ClientResult<T> {
                 st.serialize_field("ok", &false)?;
                 st.serialize_field("error", e)?;
             }
-            ClientResult::Partial { error, value } => {
+            ClientResult::Partial { error, value, .. } => {
                 st.serialize_field("ok", &false)?;
                 st.serialize_field("error", error)?;
                 st.serialize_field("value", value)?;
@@ -95,9 +100,19 @@ impl<T> std::convert::From<anyhow::Result<T>> for ClientResult<T> {
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct HostClientState {
+    pub address: String,
+    pub name: String,
+
     pub comin: Option<ClientResult<crate::comin::client::State>>,
     pub headscale: Option<ClientResult<Option<crate::headscale::client::NodeState>>>,
     pub ipmi: Option<ClientResult<crate::ipmi::client::IpmiState>>,
+}
+
+#[derive(Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct HostsClientState<'a> {
+    #[serde(serialize_with = "crate::client::ordered_map")]
+    pub hosts: &'a HashMap<String, HostClientState>,
 }
 
 /// For use with serde's [serialize_with] attribute

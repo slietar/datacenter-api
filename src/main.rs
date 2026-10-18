@@ -102,7 +102,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/whoami", get(handlers::whoami_handler))
         .route("/hosts/events", get(handlers::hosts_events_handler))
         .route("/host/{hostname}", get(handlers::host_get_handler))
-        .route("/host/{hostname}/events", get(handlers::host_events_handler))
+        .route(
+            "/host/{hostname}/events",
+            get(handlers::host_events_handler),
+        )
         // .route("/host/{hostname}/command", put(ipmi_host_put_handler))
         // .nest("/pxe", pxe::router(config.clone()))
         .fallback_service(serve_assets)

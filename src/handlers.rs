@@ -1,4 +1,4 @@
-use crate::client::{ClientResult, HostClientState};
+use crate::client::{ClientResult, HostClientState, HostsClientState};
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -36,6 +36,8 @@ pub async fn host_get_handler(
     let ipmi_state = ipmi_state.map(ClientResult::from);
 
     Ok(Json(HostClientState {
+        address: host_manager.host_config.address.clone(),
+        name,
         comin: comin_state,
         ipmi: ipmi_state,
         headscale: headscale_state,
@@ -95,6 +97,8 @@ pub async fn host_events_handler(
 
     let to_event = move |comin: &Option<_>, ipmi: &Option<_>, headscale: &Option<_>| {
         Event::default().json_data(&HostClientState {
+            address: address.clone(),
+            name: name.clone(),
             comin: comin.clone().map(ClientResult::from),
             ipmi: ipmi.clone().map(ClientResult::from),
             headscale: headscale.as_ref().map(|reading| {
@@ -107,18 +111,19 @@ pub async fn host_events_handler(
 
     let comin_stream = updates(comin_sub).map(HostStateUpdate::Comin).boxed();
     let ipmi_stream = updates(ipmi_sub).map(HostStateUpdate::Ipmi).boxed();
-    let headscale_stream = updates(headscale_sub).map(HostStateUpdate::Headscale).boxed();
+    let headscale_stream = updates(headscale_sub)
+        .map(HostStateUpdate::Headscale)
+        .boxed();
 
-    let changes = stream::select_all([comin_stream, ipmi_stream, headscale_stream]).map(
-        move |update| {
+    let changes =
+        stream::select_all([comin_stream, ipmi_stream, headscale_stream]).map(move |update| {
             match update {
                 HostStateUpdate::Comin(reading) => comin_state = Some(reading),
                 HostStateUpdate::Ipmi(reading) => ipmi_state = Some(reading),
                 HostStateUpdate::Headscale(reading) => headscale_state = Some(reading),
             }
             to_event(&comin_state, &ipmi_state, &headscale_state)
-        },
-    );
+        });
 
     let stream = stream::once(async { initial }).chain(changes);
 
@@ -127,12 +132,13 @@ pub async fn host_events_handler(
 
 /// A host's current state, and the new states that follow each change.
 async fn host_state_stream(
+    name: &str,
     host_manager: &crate::manager::HostManager,
-    headscale_sub: Option<crate::live_state::Subscription<
-        crate::headscale::node::NodesResponse,
-        anyhow::Error,
-    >>,
+    headscale_sub: Option<
+        crate::live_state::Subscription<crate::headscale::node::NodesResponse, anyhow::Error>,
+    >,
 ) -> (HostClientState, BoxStream<'static, HostClientState>) {
+    let name = name.to_owned();
     let address = host_manager.host_config.address.clone();
 
     let mut comin_sub = None;
@@ -149,21 +155,25 @@ async fn host_state_stream(
     let mut ipmi_state = ipmi_sub.as_mut().map(|sub| sub.get());
     let mut headscale_state = headscale_sub.as_mut().map(|sub| sub.get());
 
-    let to_state = move |comin: &Option<_>, ipmi: &Option<_>, headscale: &Option<_>| {
-        HostClientState {
+    let to_state =
+        move |comin: &Option<_>, ipmi: &Option<_>, headscale: &Option<_>| HostClientState {
+            address: address.clone(),
+            name: name.clone(),
+
             comin: comin.clone().map(ClientResult::from),
             ipmi: ipmi.clone().map(ClientResult::from),
             headscale: headscale.as_ref().map(|reading| {
                 crate::headscale::client::NodeState::from_reading(reading, &address)
             }),
-        }
-    };
+        };
 
     let initial = to_state(&comin_state, &ipmi_state, &headscale_state);
 
     let comin_stream = updates(comin_sub).map(HostStateUpdate::Comin).boxed();
     let ipmi_stream = updates(ipmi_sub).map(HostStateUpdate::Ipmi).boxed();
-    let headscale_stream = updates(headscale_sub).map(HostStateUpdate::Headscale).boxed();
+    let headscale_stream = updates(headscale_sub)
+        .map(HostStateUpdate::Headscale)
+        .boxed();
 
     let changes = stream::select_all([comin_stream, ipmi_stream, headscale_stream])
         .map(move |update| {
@@ -179,12 +189,6 @@ async fn host_state_stream(
     (initial, changes)
 }
 
-#[derive(Serialize)]
-struct HostsClientState<'a> {
-    #[serde(serialize_with = "crate::client::ordered_map")]
-    hosts: &'a HashMap<String, HostClientState>,
-}
-
 /// Streams the state of every host. Each event holds the full `hosts` map,
 /// the first one being the state at subscription time.
 pub async fn hosts_events_handler(
@@ -198,10 +202,14 @@ pub async fn hosts_events_handler(
     let mut hosts = HashMap::new();
     let mut streams = Vec::new();
     for (name, host_manager) in state.host_managers.iter() {
-        let (initial, changes) = host_state_stream(host_manager, headscale_sub.clone()).await;
+        let (initial, changes) = host_state_stream(name, host_manager, headscale_sub.clone()).await;
         hosts.insert(name.clone(), initial);
         let name = name.clone();
-        streams.push(changes.map(move |host_state| (name.clone(), host_state)).boxed());
+        streams.push(
+            changes
+                .map(move |host_state| (name.clone(), host_state))
+                .boxed(),
+        );
     }
     drop(headscale_sub);
 
