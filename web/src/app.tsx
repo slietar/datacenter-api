@@ -1,8 +1,11 @@
 import { Component, type ReactNode } from 'react';
+import { StyledEngineProvider } from '@mui/material/styles';
+import ErrorIcon from '@mui/icons-material/Error';
 
 import { handleHomePage } from './pages/home.js';
 
 import './App.css';
+import { Layout } from './layout.js';
 
 export type PossiblyPromise<T> = Promise<T> | T;
 export type Handler = (
@@ -113,9 +116,14 @@ export default class App extends Component<AppProps, AppState> {
 
     return {
       contents: (
-        <div>
-          <h1>Page Not Found</h1>
-        </div>
+        <Layout>
+          <div className="ErrorState">
+            <div className="icon">
+              <ErrorIcon />
+            </div>
+            <h3>Page not found</h3>
+          </div>
+        </Layout>
       ),
       title: 'Page not found',
     };
@@ -123,9 +131,12 @@ export default class App extends Component<AppProps, AppState> {
 
   override render() {
     return (
-      <div style={{ display: 'contents' }} inert={this.state.loading !== null}>
-        {this.state.page}
-      </div>
+      // Put icon styles into the "mui" layer
+      <StyledEngineProvider enableCssLayer>
+        <div style={{ display: 'contents' }} inert={this.state.loading !== null}>
+          {this.state.page}
+        </div>
+      </StyledEngineProvider>
     );
   }
 
