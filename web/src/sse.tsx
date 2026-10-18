@@ -2,18 +2,32 @@ export class ModernEventSource<T> {
   private eventSource: EventSource;
   private queue: T[] = [];
   private waiter: PromiseWithResolvers<void> | null = null;
+  private closedResolve: () => void;
 
+  readonly closed: Promise<void>;
   readonly ready: Promise<void>;
 
   constructor(url: URL | string) {
     this.eventSource = new EventSource(url.toString());
 
-    let { promise, resolve, reject } = Promise.withResolvers<void>();
+    let { promise: readyPromise, resolve: readyResolve, reject: readyReject } = Promise.withResolvers<void>();
+    let { promise: closedPromise, resolve: closedResolve, reject: closedReject } = Promise.withResolvers<void>();
 
-    this.ready = promise;
-    this.eventSource.addEventListener('open', () => void resolve(), { once: true });
+    this.ready = readyPromise;
+    this.closed = closedPromise;
+    this.closedResolve = closedResolve;
+
+    this.eventSource.addEventListener('open', () => {
+      readyResolve();
+
+      this.eventSource.addEventListener('close', () => {
+        this.closedResolve();
+      });
+    });
+
     this.eventSource.addEventListener('error', () => {
-      reject(new Error('Failed to connect to EventSource'));
+      readyReject(new Error('Failed to connect to EventSource'));
+      closedReject(new Error('Failed to connect to EventSource'));
     }, { once: true });
 
     this.eventSource.addEventListener('message', (event) => {
@@ -28,6 +42,7 @@ export class ModernEventSource<T> {
 
   close() {
     this.eventSource.close();
+    this.closedResolve();
   }
 
   async event() {

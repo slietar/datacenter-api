@@ -44,6 +44,7 @@ export function HomePage(props: {
             <th>IP addresses</th>
             <th>Headscale status</th>
             <th>IPMI status</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -54,26 +55,55 @@ export function HomePage(props: {
                 <td>{host.name}</td>
                 <td>
                   <Copiable contents={host.address}>{host.address}</Copiable>
+
+                  {/* {host.headscale && host.headscale.ok && host.headscale.value
+                    ? host.headscale.value.node.ipAddresses.map((address) => (
+                      <Copiable key={address} contents={address}>{address}</Copiable>
+                    ))
+                    : (
+                      <Copiable contents={host.address}>{host.address}</Copiable>
+                    )
+                  } */}
                 </td>
                 <td>
                   {host.headscale
                     ? mapResult(host.headscale, (headscaleState) => (
                       headscaleState
                         ? headscaleState.node.online
-                          ? <>Online</>
-                          : <>Offline, last seen {formatRelativeInstant(headscaleState.node.lastVisibilityTime * 1000)}</>
-                        : <>Not found</>
+                          ? (
+                            <>
+                              <span className="Chip" data-variant="success" />
+                              <span>Online</span>
+                            </>
+                          )
+                          : (
+                            <div className="ChipLayout">
+                              <span className="Chip" data-variant="error" />
+                              <div>
+                                <div>Offline</div>
+                                <div className="Subtext">Last seen {formatRelativeInstant(headscaleState.node.lastVisibilityTime * 1000)}</div>
+                              </div>
+                            </div>
+                          )
+                        : <></>
                     ))
                     : <>Not configured</>}
                 </td>
                 <td>
-                  {host.ipmi
-                    ? mapResult(host.ipmi, (ipmiState) => (
-                      ipmiState.powerIsOn
-                        ? <>Powered on</>
-                        : <>Powered off</>
+                  {host.ipmi && (
+                    mapResult(host.ipmi, (ipmiState) => (
+                      <>
+                        <span className="Chip" data-variant={ipmiState.powerIsOn ? "success" : "error"} />
+                        {ipmiState.powerIsOn
+                          ? <>On</>
+                          : <>Off</>
+                        }
+                      </>
                     ))
-                    : <>Not configured</>}
+                  )}
+                </td>
+                <td style={{ width: '1%' }}>
+                  <button type="button" className="Button">Manage</button>
                 </td>
               </tr>
             ))}
