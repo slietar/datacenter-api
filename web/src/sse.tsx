@@ -19,10 +19,6 @@ export class ModernEventSource<T> {
 
     this.eventSource.addEventListener('open', () => {
       readyResolve();
-
-      this.eventSource.addEventListener('close', () => {
-        this.closedResolve();
-      });
     });
 
     this.eventSource.addEventListener('error', () => {
@@ -61,15 +57,7 @@ export class ModernEventSource<T> {
 
   async * events() {
     while (true) {
-      if (this.queue.length > 0) {
-        yield this.queue.shift()!;
-      } else {
-        if (!this.waiter) {
-          this.waiter = Promise.withResolvers();
-        }
-
-        await this.waiter.promise;
-      }
+      yield await this.event();
     }
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 import { ModernEventSource } from './sse.js';
 
@@ -8,29 +8,72 @@ export type Stream<T> = {
 };
 
 export async function createStream<T>(url: URL | string) {
-  let eventSource = new ModernEventSource<T>(url.toString());
+  let urlString = url.toString();
 
-  await eventSource.ready;
+  let initialSource = new ModernEventSource<T>(urlString);
+  let initialState: T;
 
-  let initialState = await eventSource.event();
+  try {
+    await initialSource.ready;
+    initialState = await initialSource.event();
+  } finally {
+    initialSource.close();
+  }
 
-  let stream = (() => {
-    let [state, setState] = useState<T | null>(initialState);
+  let state = initialState;
+  let listeners = new Set<() => void>();
+  let eventSource: ModernEventSource<T> | null = null;
 
-    useEffect(() => {
-      (async () => {
-        for await (let event of eventSource.events()) {
-          setState(event);
+  async function consume(source: ModernEventSource<T>) {
+    let closed = Symbol('closed');
+
+    try {
+      while (true) {
+        let event = await Promise.race([
+          source.event(),
+          source.closed.then(() => closed),
+        ]);
+
+        if (event === closed) {
+          return;
         }
-      })();
 
-      return () => {
-        eventSource.close();
-      };
-    }, []);
+        state = event as T;
 
+        for (let listener of listeners) {
+          listener();
+        }
+      }
+    } catch {
+      // Connection failed; keep the last known state.
+    }
+  }
+
+  // The connection lives only while there is at least one subscriber, so
+  // StrictMode's mount/unmount/mount just closes and reopens it.
+  function subscribe(listener: () => void) {
+    listeners.add(listener);
+
+    if (listeners.size === 1) {
+      eventSource = new ModernEventSource<T>(urlString);
+      consume(eventSource);
+    }
+
+    return () => {
+      listeners.delete(listener);
+
+      if (listeners.size === 0) {
+        eventSource?.close();
+        eventSource = null;
+      }
+    };
+  }
+
+  function getSnapshot() {
     return state;
-  }) as Stream<T>;
+  }
+
+  let stream = (() => useSyncExternalStore(subscribe, getSnapshot)) as Stream<T>;
 
   stream.initialValue = initialState;
 
